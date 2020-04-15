@@ -25,6 +25,8 @@ func main() {
 
 	r := utils.NewRouter(routes)
 
+	go updateGymsPeriodically()
+
 	log.Infof("Starting LOCATION server in port %d...\n", port)
 	log.Fatal(http.ListenAndServe(addr, r))
 }
