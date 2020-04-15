@@ -1,8 +1,9 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/NOVAPokemon/utils"
-	trainerdb "github.com/NOVAPokemon/utils/database/trainer"
+	locationdb "github.com/NOVAPokemon/utils/database/location"
 	"github.com/NOVAPokemon/utils/tokens"
 	"github.com/NOVAPokemon/utils/websockets/location"
 	"github.com/gorilla/websocket"
@@ -11,7 +12,23 @@ import (
 	"time"
 )
 
-func handleSubscribeLocation(w http.ResponseWriter, r *http.Request) {
+func handleAddGymLocation(w http.ResponseWriter, r *http.Request) {
+	var gym utils.Gym
+	err := json.NewDecoder(r.Body).Decode(&gym)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	err = locationdb.AddGym(gym)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+}
+
+func handleUserLocation(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error(err)
@@ -25,10 +42,10 @@ func handleSubscribeLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go handleLocationUpdates(authToken.Username, conn)
+	go handleUserLocationUpdates(authToken.Username, conn)
 }
 
-func handleLocationUpdates(user string, conn *websocket.Conn) {
+func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	defer conn.Close()
 
 	_ = conn.SetReadDeadline(time.Now().Add(location.Timeout))
@@ -49,7 +66,7 @@ func handleLocationUpdates(user string, conn *websocket.Conn) {
 				return
 			}
 		case loc := <-inChan:
-			_, err := trainerdb.UpdateUserLocation(user, loc)
+			_, err := locationdb.UpdateIfAbsentAddUserLocation(user, loc)
 			if err != nil {
 				log.Error(err)
 				return
