@@ -3,13 +3,26 @@ package main
 import (
 	"encoding/json"
 	"github.com/NOVAPokemon/utils"
+	"github.com/NOVAPokemon/utils/clients"
 	locationdb "github.com/NOVAPokemon/utils/database/location"
+	locationMessages "github.com/NOVAPokemon/utils/messages/location"
 	"github.com/NOVAPokemon/utils/tokens"
+	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/location"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"net/http"
+	"sync"
 	"time"
+)
+
+const (
+	updateGymsInterval = 30 * time.Second
+)
+
+var (
+	gyms []utils.Gym
+	lock sync.RWMutex
 )
 
 func handleAddGymLocation(w http.ResponseWriter, r *http.Request) {
@@ -25,7 +38,6 @@ func handleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
 }
 
 func handleUserLocation(w http.ResponseWriter, r *http.Request) {
@@ -55,26 +67,18 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	})
 
 	var pingTicker = time.NewTicker(location.PingCooldown)
-	inChan := make(chan utils.Location)
-	finish := make(chan *struct{})
+	inChan := make(chan *ws.Message)
+	finish := make(chan struct{})
 
-	go handleLocationMessages(conn, inChan, finish)
+	go handleMessages(conn, inChan, finish)
 	for {
 		select {
 		case <-pingTicker.C:
 			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				return
 			}
-		case loc := <-inChan:
-			_, err := locationdb.UpdateIfAbsentAddUserLocation(utils.UserLocation{
-				Username: user,
-				Location: loc,
-			})
-			if err != nil {
-				log.Error(err)
-				return
-			}
-
+		case msg := <-inChan:
+			handleMsg(conn, user, msg)
 			_ = conn.SetReadDeadline(time.Now().Add(location.Timeout))
 		case <-finish:
 			log.Warn("Stopped tracking location")
@@ -83,16 +87,61 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	}
 }
 
-func handleLocationMessages(conn *websocket.Conn, channel chan utils.Location, finished chan *struct{}) {
+func handleMessages(conn *websocket.Conn, channel chan *ws.Message, finished chan struct{}) {
 	for {
-		loc := utils.Location{}
-		err := conn.ReadJSON(&loc)
+		msg, err := clients.ReadMessagesWithoutParse(conn)
 		if err != nil {
 			log.Printf("error: %v", err)
-			finished <- nil
+			close(finished)
 			return
 		} else {
-			channel <- loc
+			channel <- msg
 		}
+	}
+}
+
+func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
+	switch msg.MsgType {
+	case location.UpdateLocation:
+		locationMsg := locationMessages.Deserialize(msg).(locationMessages.UpdateLocationMessage)
+
+		_, err := locationdb.UpdateIfAbsentAddUserLocation(utils.UserLocation{
+			Username: user,
+			Location: locationMsg.Location,
+		})
+		if err != nil {
+			log.Error(err)
+			return
+		}
+
+		gymsInVicinity := getGymsInVicinity(locationMsg.Location)
+
+		if len(gymsInVicinity) > 0 {
+			gymsMsgString := locationMessages.GymsMessage{Gyms: gymsInVicinity}.Serialize().Serialize()
+			clients.Send(conn, &gymsMsgString)
+		}
+	}
+}
+
+func getGymsInVicinity(location utils.Location) []utils.Gym {
+	// TODO
+	return gyms
+}
+
+func updateGymsPeriodically() {
+	lock.Lock()
+	defer lock.Unlock()
+
+	timer := time.NewTimer(updateGymsInterval)
+
+	for {
+		var err error
+		gyms, err = locationdb.GetGyms()
+		if err != nil {
+			return
+		}
+
+		<-timer.C
+		timer.Reset(updateGymsInterval)
 	}
 }
