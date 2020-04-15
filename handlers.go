@@ -66,7 +66,10 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 				return
 			}
 		case loc := <-inChan:
-			_, err := locationdb.UpdateIfAbsentAddUserLocation(user, loc)
+			_, err := locationdb.UpdateIfAbsentAddUserLocation(utils.UserLocation{
+				Username: user,
+				Location: loc,
+			})
 			if err != nil {
 				log.Error(err)
 				return
