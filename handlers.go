@@ -20,7 +20,6 @@ func handleSubscribeLocation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authToken, err := tokens.ExtractAndVerifyAuthToken(r.Header)
-
 	if err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
@@ -61,7 +60,6 @@ func handleLocationUpdates(user string, conn *websocket.Conn) {
 			log.Warn("Stopped tracking location")
 			return
 		}
-
 	}
 }
 
