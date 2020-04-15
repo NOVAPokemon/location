@@ -103,7 +103,9 @@ func handleMessages(conn *websocket.Conn, channel chan *ws.Message, finished cha
 func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 	switch msg.MsgType {
 	case location.UpdateLocation:
-		locationMsg := locationMessages.Deserialize(msg).(locationMessages.UpdateLocationMessage)
+		locationMsg := locationMessages.Deserialize(msg).(*locationMessages.UpdateLocationMessage)
+
+		log.Info(user, " ", locationMsg.Location)
 
 		_, err := locationdb.UpdateIfAbsentAddUserLocation(utils.UserLocation{
 			Username: user,
@@ -120,6 +122,8 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 			gymsMsgString := locationMessages.GymsMessage{Gyms: gymsInVicinity}.Serialize().Serialize()
 			clients.Send(conn, &gymsMsgString)
 		}
+	default:
+		log.Warn("invalid msg type")
 	}
 }
 
