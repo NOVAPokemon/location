@@ -63,7 +63,7 @@ func handleUserLocation(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
-	defer conn.Close()
+	defer ws.CloseConnection(conn)
 
 	_ = conn.SetReadDeadline(time.Now().Add(location.Timeout))
 	conn.SetPongHandler(func(string) error {
