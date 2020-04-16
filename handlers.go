@@ -107,7 +107,7 @@ func handleMessages(conn *websocket.Conn, channel chan *ws.Message, finished cha
 
 func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 	switch msg.MsgType {
-	case location.UpdateLocation:
+	case locationMessages.UpdateLocation:
 		locationMsg := locationMessages.Deserialize(msg).(*locationMessages.UpdateLocationMessage)
 
 		log.Info(user, " ", locationMsg.Location)
