@@ -20,13 +20,13 @@ import (
 
 const (
 	updateGymsInterval = 30 * time.Second
-	locationVicinity = 100
+	locationVicinity   = 100
 
 	exampleGymsFilename = "example_gyms.json"
 )
 
 var (
-	gyms = loadExampleGyms()
+	gyms []utils.Gym
 	lock sync.RWMutex
 )
 
@@ -123,6 +123,8 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 
 		gymsInVicinity := getGymsInVicinity(locationMsg.Location)
 
+		log.Info("gyms in vicinity: ", gymsInVicinity)
+
 		if len(gymsInVicinity) > 0 {
 			gymsMsgString := locationMessages.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()
 			clients.Send(conn, &gymsMsgString)
@@ -135,10 +137,16 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 // TODO Discuss ideas to improve this. Maybe reduce the number of times this is calculated.
 func getGymsInVicinity(location utils.Location) []utils.Gym {
 	var gymsInVicinity []utils.Gym
+
+	log.Info("gyms considered:", gyms)
+
 	for _, gym := range gyms {
-		if gps.CalcDistanceBetweenLocations(location, gym.Location) <= locationVicinity {
+		distance := gps.CalcDistanceBetweenLocations(location, gym.Location)
+		if distance <= locationVicinity {
 			gymsInVicinity = append(gymsInVicinity, gym)
 		}
+
+		log.Info("distance:", distance)
 	}
 
 	return gymsInVicinity
@@ -162,19 +170,24 @@ func updateGymsPeriodically() {
 	}
 }
 
-func loadExampleGyms() []utils.Gym {
+func loadExampleGyms() {
 	fileData, err := ioutil.ReadFile(exampleGymsFilename)
 	if err != nil {
 		log.Error(err)
-		return nil
+		return
 	}
 
 	var gyms []utils.Gym
 	err = json.Unmarshal(fileData, &gyms)
 	if err != nil {
 		log.Error(err)
-		return nil
+		return
 	}
 
-	return gyms
+	for _, gym := range gyms {
+		if err := locationdb.AddGym(gym); err != nil {
+			log.Error(err)
+			return
+		}
+	}
 }

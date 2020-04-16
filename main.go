@@ -25,6 +25,7 @@ func main() {
 
 	r := utils.NewRouter(routes)
 
+	loadExampleGyms()
 	go updateGymsPeriodically()
 
 	log.Infof("Starting LOCATION server in port %d...\n", port)
