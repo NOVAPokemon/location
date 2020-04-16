@@ -146,7 +146,7 @@ func getGymsInVicinity(location utils.Location) []utils.Gym {
 			gymsInVicinity = append(gymsInVicinity, gym)
 		}
 
-		log.Info("distance:", distance)
+		log.Infof("distance to %f: %f", gym.Location.Latitude, distance)
 	}
 
 	return gymsInVicinity
@@ -187,7 +187,6 @@ func loadExampleGyms() {
 	for _, gym := range gyms {
 		if err := locationdb.AddGym(gym); err != nil {
 			log.Error(err)
-			return
 		}
 	}
 }
