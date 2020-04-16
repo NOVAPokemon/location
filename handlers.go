@@ -5,12 +5,14 @@ import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/clients"
 	locationdb "github.com/NOVAPokemon/utils/database/location"
+	"github.com/NOVAPokemon/utils/gps"
 	locationMessages "github.com/NOVAPokemon/utils/messages/location"
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/location"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+	"io/ioutil"
 	"net/http"
 	"sync"
 	"time"
@@ -18,10 +20,13 @@ import (
 
 const (
 	updateGymsInterval = 30 * time.Second
+	locationVicinity = 100
+
+	exampleGymsFilename = "example_gyms.json"
 )
 
 var (
-	gyms []utils.Gym
+	gyms = loadExampleGyms()
 	lock sync.RWMutex
 )
 
@@ -127,9 +132,16 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 	}
 }
 
+// TODO Discuss ideas to improve this. Maybe reduce the number of times this is calculated.
 func getGymsInVicinity(location utils.Location) []utils.Gym {
-	// TODO
-	return gyms
+	var gymsInVicinity []utils.Gym
+	for _, gym := range gyms {
+		if gps.CalcDistanceBetweenLocations(location, gym.Location) <= locationVicinity {
+			gymsInVicinity = append(gymsInVicinity, gym)
+		}
+	}
+
+	return gymsInVicinity
 }
 
 func updateGymsPeriodically() {
@@ -148,4 +160,21 @@ func updateGymsPeriodically() {
 		<-timer.C
 		timer.Reset(updateGymsInterval)
 	}
+}
+
+func loadExampleGyms() []utils.Gym {
+	fileData, err := ioutil.ReadFile(exampleGymsFilename)
+	if err != nil {
+		log.Error(err)
+		return nil
+	}
+
+	var gyms []utils.Gym
+	err = json.Unmarshal(fileData, &gyms)
+	if err != nil {
+		log.Error(err)
+		return nil
+	}
+
+	return gyms
 }
