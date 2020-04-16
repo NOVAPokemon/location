@@ -171,6 +171,11 @@ func updateGymsPeriodically() {
 }
 
 func loadExampleGyms() {
+	if err := locationdb.DeleteAllGyms(); err != nil {
+		log.Error(err)
+		return
+	}
+
 	fileData, err := ioutil.ReadFile(exampleGymsFilename)
 	if err != nil {
 		log.Error(err)
