@@ -1,0 +1,26 @@
+[
+  {
+    "location": {
+      "latitude": 0.5,
+      "longitude": 0.5
+    }
+  },
+  {
+    "location": {
+      "latitude": 0.7,
+      "longitude": 0.7
+    }
+  },
+  {
+    "location": {
+      "latitude": 105.0,
+      "longitude": 105.0
+    }
+  },
+  {
+    "location": {
+      "latitude": -105.0,
+      "longitude": -105.0
+    }
+  }
+]
