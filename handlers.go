@@ -119,7 +119,7 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 		gymsInVicinity := getGymsInVicinity(locationMsg.Location)
 
 		if len(gymsInVicinity) > 0 {
-			gymsMsgString := locationMessages.GymsMessage{Gyms: gymsInVicinity}.Serialize().Serialize()
+			gymsMsgString := locationMessages.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()
 			clients.Send(conn, &gymsMsgString)
 		}
 	default:
