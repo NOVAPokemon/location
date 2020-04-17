@@ -9,7 +9,6 @@ import (
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/location"
-	locationMessages "github.com/NOVAPokemon/utils/websockets/messages/location"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"io/ioutil"
@@ -107,8 +106,8 @@ func handleMessages(conn *websocket.Conn, channel chan *ws.Message, finished cha
 
 func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 	switch msg.MsgType {
-	case locationMessages.UpdateLocation:
-		locationMsg := locationMessages.Deserialize(msg).(*locationMessages.UpdateLocationMessage)
+	case location.UpdateLocation:
+		locationMsg := location.Deserialize(msg).(*location.UpdateLocationMessage)
 
 		log.Info(user, " ", locationMsg.Location)
 
@@ -126,7 +125,7 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 		log.Info("gyms in vicinity: ", gymsInVicinity)
 
 		if len(gymsInVicinity) > 0 {
-			gymsMsgString := locationMessages.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()
+			gymsMsgString := location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()
 			clients.Send(conn, &gymsMsgString)
 		}
 	default:
