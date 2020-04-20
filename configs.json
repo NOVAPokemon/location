@@ -1,0 +1,6 @@
+{
+  "timeout_interval": 15,
+  "ping_interval": 1,
+  "update_gyms_interval": 30,
+  "vicinity": 100.0
+}

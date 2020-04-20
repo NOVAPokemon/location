@@ -18,13 +18,15 @@ import (
 )
 
 const (
-	updateGymsInterval = 30 * time.Second
-	locationVicinity   = 100
-
+	configFilename = "configs.json"
 	exampleGymsFilename = "example_gyms.json"
 )
 
 var (
+	config = loadConfig()
+
+	timeoutInDuration = time.Duration(config.Timeout) * time.Second
+
 	gyms []utils.Gym
 	lock sync.RWMutex
 )
@@ -64,13 +66,13 @@ func handleUserLocation(w http.ResponseWriter, r *http.Request) {
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	defer ws.CloseConnection(conn)
 
-	_ = conn.SetReadDeadline(time.Now().Add(location.Timeout))
+	_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 	conn.SetPongHandler(func(string) error {
-		_ = conn.SetReadDeadline(time.Now().Add(location.Timeout))
+		_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		return nil
 	})
 
-	var pingTicker = time.NewTicker(location.PingCooldown)
+	var pingTicker = time.NewTicker(time.Duration(config.Ping) * time.Second)
 	inChan := make(chan *ws.Message)
 	finish := make(chan struct{})
 
@@ -83,7 +85,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			}
 		case msg := <-inChan:
 			handleMsg(conn, user, msg)
-			_ = conn.SetReadDeadline(time.Now().Add(location.Timeout))
+			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		case <-finish:
 			log.Warn("Stopped tracking location")
 			return
@@ -141,7 +143,7 @@ func getGymsInVicinity(location utils.Location) []utils.Gym {
 
 	for _, gym := range gyms {
 		distance := gps.CalcDistanceBetweenLocations(location, gym.Location)
-		if distance <= locationVicinity {
+		if distance <= config.Vicinity {
 			gymsInVicinity = append(gymsInVicinity, gym)
 		}
 
@@ -155,7 +157,7 @@ func updateGymsPeriodically() {
 	lock.Lock()
 	defer lock.Unlock()
 
-	timer := time.NewTimer(updateGymsInterval)
+	timer := time.NewTimer(time.Duration(config.UpdateGymsInterval) * time.Second)
 
 	for {
 		var err error
@@ -165,8 +167,25 @@ func updateGymsPeriodically() {
 		}
 
 		<-timer.C
-		timer.Reset(updateGymsInterval)
+		timer.Reset(time.Duration(config.UpdateGymsInterval) * time.Second)
 	}
+}
+
+func loadConfig() *LocationServerConfig {
+	fileData, err := ioutil.ReadFile(configFilename)
+	if err != nil {
+		log.Error(err)
+		return nil
+	}
+
+	var config LocationServerConfig
+	err = json.Unmarshal(fileData, &config)
+	if err != nil {
+		log.Error(err)
+		return nil
+	}
+
+	return &config
 }
 
 func loadExampleGyms() {
