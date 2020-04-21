@@ -2,6 +2,7 @@
   "timeout_interval": 15,
   "ping_interval": 1,
   "update_gyms_interval": 30,
+  "update_pokemon_interval": 60,
   "vicinity": 100.0,
   "interval_generate": 2,
   "pokemons_to_generate": 10,
