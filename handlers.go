@@ -2,36 +2,40 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/clients"
+	generatordb "github.com/NOVAPokemon/utils/database/generator"
 	locationdb "github.com/NOVAPokemon/utils/database/location"
 	"github.com/NOVAPokemon/utils/gps"
+	"github.com/NOVAPokemon/utils/items"
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/location"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
 )
 
 const (
-	configFilename = "configs.json"
 	exampleGymsFilename = "example_gyms.json"
+
+	maxCatchingProbability = 100
 )
 
 var (
-	config = loadConfig()
-
 	timeoutInDuration = time.Duration(config.Timeout) * time.Second
 
 	gyms []utils.Gym
 	lock sync.RWMutex
+
+	httpClient = &http.Client{}
 )
 
-func handleAddGymLocation(w http.ResponseWriter, r *http.Request) {
+func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 	var gym utils.Gym
 	err := json.NewDecoder(r.Body).Decode(&gym)
 	if err != nil {
@@ -46,7 +50,7 @@ func handleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleUserLocation(w http.ResponseWriter, r *http.Request) {
+func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error(err)
@@ -61,6 +65,81 @@ func handleUserLocation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	go handleUserLocationUpdates(authToken.Username, conn)
+}
+
+func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
+	authToken, err := tokens.ExtractAndVerifyAuthToken(r.Header)
+	if err != nil {
+		log.Error("no auth token")
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	var pokeball items.Item
+	err = json.NewDecoder(r.Body).Decode(&pokeball)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	if !pokeball.IsPokeBall() {
+		log.Error("invalid item to catch")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	wildPokemons := generatordb.GetWildPokemons()
+	selectedPokemon := &wildPokemons[rand.Intn(len(wildPokemons))]
+
+	var catchingProbability float64
+	if pokeball.Effect.Value == maxCatchingProbability {
+		catchingProbability = 1
+	} else {
+		catchingProbability = 1 - ((float64(selectedPokemon.Level) / config.MaxLevel) *
+			(float64(pokeball.Effect.Value) / maxCatchingProbability))
+	}
+
+	log.Info("catching probability: ", catchingProbability)
+
+	caught := rand.Float64() <= catchingProbability
+	caughtMessage := clients.CaughtPokemonMessage{
+		Caught: caught,
+	}
+
+	jsonBytes, err := json.Marshal(caughtMessage)
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if !caught {
+		_, err = w.Write(jsonBytes)
+		if err != nil {
+			log.Error(err)
+		}
+		return
+	}
+
+	log.Info(authToken.Username, " caught: ", caught)
+	var trainersClient = clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), httpClient)
+	_, err = trainersClient.AddPokemonToTrainer(authToken.Username, *selectedPokemon)
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	pokemonTokens := make([]string, 0, len(trainersClient.PokemonTokens))
+	for _, tokenString := range trainersClient.PokemonTokens {
+		pokemonTokens = append(pokemonTokens, tokenString)
+	}
+
+	w.Header()[tokens.PokemonsTokenHeaderName] = pokemonTokens
+	_, err = w.Write(jsonBytes)
+	if err != nil {
+		log.Error(err)
+	}
 }
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
@@ -151,65 +230,4 @@ func getGymsInVicinity(location utils.Location) []utils.Gym {
 	}
 
 	return gymsInVicinity
-}
-
-func updateGymsPeriodically() {
-	lock.Lock()
-	defer lock.Unlock()
-
-	timer := time.NewTimer(time.Duration(config.UpdateGymsInterval) * time.Second)
-
-	for {
-		var err error
-		gyms, err = locationdb.GetGyms()
-		if err != nil {
-			return
-		}
-
-		<-timer.C
-		timer.Reset(time.Duration(config.UpdateGymsInterval) * time.Second)
-	}
-}
-
-func loadConfig() *LocationServerConfig {
-	fileData, err := ioutil.ReadFile(configFilename)
-	if err != nil {
-		log.Error(err)
-		return nil
-	}
-
-	var config LocationServerConfig
-	err = json.Unmarshal(fileData, &config)
-	if err != nil {
-		log.Error(err)
-		return nil
-	}
-
-	return &config
-}
-
-func loadExampleGyms() {
-	if err := locationdb.DeleteAllGyms(); err != nil {
-		log.Error(err)
-		return
-	}
-
-	fileData, err := ioutil.ReadFile(exampleGymsFilename)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	var gyms []utils.Gym
-	err = json.Unmarshal(fileData, &gyms)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	for _, gym := range gyms {
-		if err := locationdb.AddGym(gym); err != nil {
-			log.Error(err)
-		}
-	}
 }

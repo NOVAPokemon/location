@@ -2,5 +2,10 @@
   "timeout_interval": 15,
   "ping_interval": 1,
   "update_gyms_interval": 30,
-  "vicinity": 100.0
+  "vicinity": 100.0,
+  "interval_generate": 2,
+  "pokemons_to_generate": 10,
+  "max_level": 100.0,
+  "max_hp": 500.0,
+  "max_damage": 500.0
 }

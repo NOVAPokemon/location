@@ -7,6 +7,7 @@ import (
 
 const UserLocationName = "USER_LOCATION"
 const GymLocationName = "GYM_LOCATION"
+const CatchWildPokemonName = "CATCH_WILD_POKEMON"
 
 const GET = "GET"
 const POST = "POST"
@@ -16,13 +17,20 @@ var routes = utils.Routes{
 		Name:        UserLocationName,
 		Method:      GET,
 		Pattern:     api.UserLocationRoute,
-		HandlerFunc: handleUserLocation,
+		HandlerFunc: HandleUserLocation,
 	},
 
 	utils.Route{
 		Name:        GymLocationName,
 		Method:      POST,
 		Pattern:     api.GymLocationRoute,
-		HandlerFunc: handleAddGymLocation,
+		HandlerFunc: HandleAddGymLocation,
+	},
+
+	utils.Route{
+		Name:        CatchWildPokemonName,
+		Method:      GET,
+		Pattern:     api.CatchWildPokemonRoute,
+		HandlerFunc: HandleCatchWildPokemon,
 	},
 }
