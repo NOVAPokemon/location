@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/NOVAPokemon/utils"
-	generatordb "github.com/NOVAPokemon/utils/database/generator"
 	locationdb "github.com/NOVAPokemon/utils/database/location"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/gorilla/websocket"
@@ -40,8 +39,12 @@ func main() {
 	r := utils.NewRouter(routes)
 
 	loadExampleGyms()
-	go updateGymsPeriodically()
 	go generate(pokemonSpecies)
+
+	time.Sleep(2 * time.Second)
+
+	go updateGymsPeriodically()
+	go updatePokemonPeriodically()
 
 	log.Infof("Starting LOCATION server in port %d...\n", port)
 	log.Fatal(http.ListenAndServe(addr, r))
@@ -62,7 +65,7 @@ func generateWildPokemons(pokemonSpecies []string) {
 	stdDamageDeviation := config.MaxDamage / 20
 
 	for i := 0; i < config.NumberOfPokemonsToGenerate; i++ {
-		err, _ := generatordb.AddWildPokemon(*pokemons.GetOneWildPokemon(config.MaxLevel, stdHPDeviation,
+		err, _ := locationdb.AddWildPokemon(*pokemons.GetOneWildPokemon(config.MaxLevel, stdHPDeviation,
 			config.MaxHP, stdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1]))
 
 		if err != nil {
@@ -73,7 +76,7 @@ func generateWildPokemons(pokemonSpecies []string) {
 }
 
 func cleanWildPokemons() {
-	err := generatordb.DeleteWildPokemons()
+	err := locationdb.DeleteWildPokemons()
 
 	if err != nil {
 		return
@@ -81,21 +84,55 @@ func cleanWildPokemons() {
 }
 
 func updateGymsPeriodically() {
-	lock.Lock()
-	defer lock.Unlock()
+	ticker := time.NewTicker(time.Duration(config.UpdateGymsInterval) * time.Second)
+	defer ticker.Stop()
 
-	timer := time.NewTimer(time.Duration(config.UpdateGymsInterval) * time.Second)
+	if err := updateGyms(); err != nil {
+		log.Error(err)
+		return
+	}
 
 	for {
-		var err error
-		gyms, err = locationdb.GetGyms()
-		if err != nil {
+		gymsLock.Lock()
+		if err := updateGyms(); err != nil {
+			log.Error(err)
 			return
 		}
-
-		<-timer.C
-		timer.Reset(time.Duration(config.UpdateGymsInterval) * time.Second)
+		gymsLock.Unlock()
+		<-ticker.C
 	}
+}
+
+func updateGyms() error {
+	var err error
+	gyms, err = locationdb.GetGyms()
+	return err
+}
+
+func updatePokemonPeriodically() {
+	ticker := time.NewTicker(time.Duration(config.UpdatePokemonInterval) * time.Second)
+	defer ticker.Stop()
+
+	if err := updatePokemon(); err != nil {
+		log.Error(err)
+		return
+	}
+
+	for {
+		pokemonLock.Lock()
+		if err := updatePokemon(); err != nil {
+			log.Error(err)
+			return
+		}
+		pokemonLock.Unlock()
+		<-ticker.C
+	}
+}
+
+func updatePokemon() error {
+	var err error
+	pokemon, err = locationdb.GetWildPokemons()
+	return err
 }
 
 // Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json

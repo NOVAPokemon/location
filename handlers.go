@@ -2,13 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/NOVAPokemon/utils"
+	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
-	generatordb "github.com/NOVAPokemon/utils/database/generator"
 	locationdb "github.com/NOVAPokemon/utils/database/location"
 	"github.com/NOVAPokemon/utils/gps"
-	"github.com/NOVAPokemon/utils/items"
+	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/location"
@@ -29,10 +30,12 @@ const (
 var (
 	timeoutInDuration = time.Duration(config.Timeout) * time.Second
 
-	gyms []utils.Gym
-	lock sync.RWMutex
+	gyms    []utils.Gym
+	pokemon []pokemons.Pokemon
 
-	httpClient = &http.Client{}
+	httpClient  = &http.Client{}
+	gymsLock    sync.RWMutex
+	pokemonLock sync.RWMutex
 )
 
 func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
@@ -75,21 +78,42 @@ func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var pokeball items.Item
-	err = json.NewDecoder(r.Body).Decode(&pokeball)
+	var request api.CatchWildPokemonRequest
+	err = json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
+	pokeball := request.Pokeball
 	if !pokeball.IsPokeBall() {
 		log.Error("invalid item to catch")
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	wildPokemons := generatordb.GetWildPokemons()
-	selectedPokemon := &wildPokemons[rand.Intn(len(wildPokemons))]
+	wildPokemons, err := locationdb.GetWildPokemons()
+	if err != nil {
+		log.Error(err)
+		return
+	}
+
+	pokemon := request.Pokemon
+	found := false
+	for _, pokemonRetrieved := range wildPokemons {
+		if pokemon.Id.Hex() == pokemonRetrieved.Id.Hex() {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		w.WriteHeader(http.StatusNotFound)
+		log.Error(errors.New(fmt.Sprintf("pokemon %s is not available to catch", pokemon.Id.Hex())))
+		return
+	}
+
+	selectedPokemon := pokemon
 
 	var catchingProbability float64
 	if pokeball.Effect.Value == maxCatchingProbability {
@@ -123,7 +147,7 @@ func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 
 	log.Info(authToken.Username, " caught: ", caught)
 	var trainersClient = clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), httpClient)
-	_, err = trainersClient.AddPokemonToTrainer(authToken.Username, *selectedPokemon)
+	_, err = trainersClient.AddPokemonToTrainer(authToken.Username, selectedPokemon)
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -155,11 +179,12 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	inChan := make(chan *ws.Message)
 	finish := make(chan struct{})
 
-	go handleMessages(conn, inChan, finish)
+	go handleMessagesLoop(conn, inChan, finish)
 	for {
 		select {
 		case <-pingTicker.C:
 			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
+				log.Error(err)
 				return
 			}
 		case msg := <-inChan:
@@ -172,7 +197,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	}
 }
 
-func handleMessages(conn *websocket.Conn, channel chan *ws.Message, finished chan struct{}) {
+func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished chan struct{}) {
 	for {
 		msg, err := clients.ReadMessagesWithoutParse(conn)
 		if err != nil {
@@ -190,8 +215,6 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 	case location.UpdateLocation:
 		locationMsg := location.Deserialize(msg).(*location.UpdateLocationMessage)
 
-		log.Info(user, " ", locationMsg.Location)
-
 		_, err := locationdb.UpdateIfAbsentAddUserLocation(utils.UserLocation{
 			Username: user,
 			Location: locationMsg.Location,
@@ -202,13 +225,20 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 		}
 
 		gymsInVicinity := getGymsInVicinity(locationMsg.Location)
-
-		log.Info("gyms in vicinity: ", gymsInVicinity)
+		pokemonInVicinity := getPokemonInVicinity(locationMsg.Location)
 
 		if len(gymsInVicinity) > 0 {
 			gymsMsgString := location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()
 			clients.Send(conn, &gymsMsgString)
 		}
+
+		if len(pokemonInVicinity) > 0 {
+			pokemonMsgString := location.PokemonMessage{
+				Pokemon: pokemonInVicinity,
+			}.SerializeToWSMessage().Serialize()
+			clients.Send(conn, &pokemonMsgString)
+		}
+
 	default:
 		log.Warn("invalid msg type")
 	}
@@ -216,18 +246,25 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 
 // TODO Discuss ideas to improve this. Maybe reduce the number of times this is calculated.
 func getGymsInVicinity(location utils.Location) []utils.Gym {
-	var gymsInVicinity []utils.Gym
+	gymsLock.RLock()
+	defer gymsLock.RUnlock()
 
-	log.Info("gyms considered:", gyms)
+	var gymsInVicinity []utils.Gym
 
 	for _, gym := range gyms {
 		distance := gps.CalcDistanceBetweenLocations(location, gym.Location)
 		if distance <= config.Vicinity {
 			gymsInVicinity = append(gymsInVicinity, gym)
 		}
-
-		log.Infof("distance to %f: %f", gym.Location.Latitude, distance)
 	}
 
 	return gymsInVicinity
+}
+
+//TODO add filter logic in here
+func getPokemonInVicinity(location utils.Location) []pokemons.Pokemon {
+	pokemonLock.RLock()
+	defer pokemonLock.RUnlock()
+
+	return pokemon
 }
