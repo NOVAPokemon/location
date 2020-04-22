@@ -146,7 +146,7 @@ func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Info(authToken.Username, " caught: ", caught)
-	var trainersClient = clients.NewTrainersClient(fmt.Sprintf("%s:%d", utils.Host, utils.TrainersPort), httpClient)
+	var trainersClient = clients.NewTrainersClient(httpClient)
 	_, err = trainersClient.AddPokemonToTrainer(authToken.Username, selectedPokemon)
 	if err != nil {
 		log.Error(err)
