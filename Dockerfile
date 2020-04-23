@@ -6,7 +6,9 @@ RUN mkdir /service
 WORKDIR /service
 COPY $executable .
 COPY configs.json .
-COPY example_gyms.json .
 COPY pokemons.json .
 
-ENTRYPOINT ./$executable
+COPY dockerize .
+RUN chmod +x dockerize
+
+CMD ["$executable"]
