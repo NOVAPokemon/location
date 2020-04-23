@@ -189,7 +189,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			handleMsg(conn, user, msg)
 			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		case <-finish:
-			log.Warn("Stopped tracking location")
+			log.Info("Stopped tracking location")
 			return
 		}
 	}
