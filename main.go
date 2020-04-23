@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	host = utils.Host
+	host = utils.ServeHost
 	port = utils.LocationPort
 
 	PokemonsFilename = "pokemons.json"
@@ -38,7 +38,6 @@ func main() {
 
 	r := utils.NewRouter(routes)
 
-	loadExampleGyms()
 	go generate(pokemonSpecies)
 
 	time.Sleep(2 * time.Second)
@@ -55,7 +54,6 @@ func generate(pokemonSpecies []string) {
 		log.Info("Refreshing wild pokemons...")
 		cleanWildPokemons()
 		generateWildPokemons(pokemonSpecies)
-		log.Info("Refreshing catchable items...")
 		time.Sleep(time.Duration(config.IntervalBetweenGenerations) * time.Minute)
 	}
 }
@@ -171,30 +169,4 @@ func loadConfig() *LocationServerConfig {
 	}
 
 	return &config
-}
-
-func loadExampleGyms() {
-	if err := locationdb.DeleteAllGyms(); err != nil {
-		log.Error(err)
-		return
-	}
-
-	fileData, err := ioutil.ReadFile(exampleGymsFilename)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	var gyms []utils.Gym
-	err = json.Unmarshal(fileData, &gyms)
-	if err != nil {
-		log.Error(err)
-		return
-	}
-
-	for _, gym := range gyms {
-		if err := locationdb.AddGym(gym); err != nil {
-			log.Error(err)
-		}
-	}
 }

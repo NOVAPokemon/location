@@ -22,8 +22,6 @@ import (
 )
 
 const (
-	exampleGymsFilename = "example_gyms.json"
-
 	maxCatchingProbability = 100
 )
 
