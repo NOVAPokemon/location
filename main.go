@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/NOVAPokemon/utils"
-	locationdb "github.com/NOVAPokemon/utils/database/location"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
 	"io/ioutil"
+	"math"
 	"math/rand"
 	"net/http"
 	"time"
@@ -27,114 +27,26 @@ var (
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
 	}
-	config = loadConfig()
+	config         = loadConfig()
+	pokemonSpecies []string
 )
 
 func main() {
 	addr := fmt.Sprintf("%s:%d", host, port)
-	pokemonSpecies := loadPokemons()
+	pokemonSpecies = loadPokemonSpecies()
 
 	rand.Seed(time.Now().Unix())
 
 	r := utils.NewRouter(routes)
 
-	go generate(pokemonSpecies)
-
 	time.Sleep(2 * time.Second)
-
-	go updateGymsPeriodically()
-	go updatePokemonPeriodically()
 
 	log.Infof("Starting LOCATION server in port %d...\n", port)
 	log.Fatal(http.ListenAndServe(addr, r))
 }
 
-func generate(pokemonSpecies []string) {
-	for {
-		log.Info("Refreshing wild pokemons...")
-		cleanWildPokemons()
-		generateWildPokemons(pokemonSpecies)
-		time.Sleep(time.Duration(config.IntervalBetweenGenerations) * time.Minute)
-	}
-}
-
-func generateWildPokemons(pokemonSpecies []string) {
-	stdHPDeviation := config.MaxHP / 20
-	stdDamageDeviation := config.MaxDamage / 20
-
-	for i := 0; i < config.NumberOfPokemonsToGenerate; i++ {
-		err, _ := locationdb.AddWildPokemon(*pokemons.GetOneWildPokemon(config.MaxLevel, stdHPDeviation,
-			config.MaxHP, stdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies))-1]))
-
-		if err != nil {
-			log.Error("Error adding wild pokemon")
-			log.Error(err)
-		}
-	}
-}
-
-func cleanWildPokemons() {
-	err := locationdb.DeleteWildPokemons()
-
-	if err != nil {
-		return
-	}
-}
-
-func updateGymsPeriodically() {
-	ticker := time.NewTicker(time.Duration(config.UpdateGymsInterval) * time.Second)
-	defer ticker.Stop()
-
-	if err := updateGyms(); err != nil {
-		log.Error(err)
-		return
-	}
-
-	for {
-		gymsLock.Lock()
-		if err := updateGyms(); err != nil {
-			log.Error(err)
-			return
-		}
-		gymsLock.Unlock()
-		<-ticker.C
-	}
-}
-
-func updateGyms() error {
-	var err error
-	gyms, err = locationdb.GetGyms()
-	return err
-}
-
-func updatePokemonPeriodically() {
-	ticker := time.NewTicker(time.Duration(config.UpdatePokemonInterval) * time.Second)
-	defer ticker.Stop()
-
-	if err := updatePokemon(); err != nil {
-		log.Error(err)
-		return
-	}
-
-	for {
-		pokemonLock.Lock()
-		if err := updatePokemon(); err != nil {
-			log.Error(err)
-			return
-		}
-		pokemonLock.Unlock()
-		<-ticker.C
-	}
-}
-
-func updatePokemon() error {
-	var err error
-	pokemon, err = locationdb.GetWildPokemons()
-	return err
-}
-
 // Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
-func loadPokemons() []string {
+func loadPokemonSpecies() []string {
 	data, err := ioutil.ReadFile(PokemonsFilename)
 	if err != nil {
 		log.Fatal("Error loading pokemons file")
@@ -168,5 +80,41 @@ func loadConfig() *LocationServerConfig {
 		return nil
 	}
 
+	if !isPerfectSquare(config.NumRegionsInWorld) {
+		log.Panic("Number of regions is not a perfect square (i.e. 4, 9, 16...)")
+	}
+
 	return &config
+}
+
+func isPerfectSquare(nr int) bool {
+	sqrt := math.Sqrt(float64(nr))
+	return sqrt*sqrt == float64(nr)
+
+}
+
+func generateWildPokemons(toGenerate int, pokemonSpecies []string, topLeft utils.Location, botRight utils.Location) []utils.WildPokemon {
+	stdHPDeviation := config.MaxHP / 20
+	stdDamageDeviation := config.MaxDamage / 20
+	regionSize := topLeft.Latitude - botRight.Latitude
+	pokemonsArr := make([]utils.WildPokemon, 0, config.NumberOfPokemonsToGenerate)
+
+	if len(pokemonSpecies) == 0 {
+		log.Panic("array pokemonSpecies is empty")
+	}
+
+	for i := 0; i < toGenerate; i++ {
+		pokemon := *pokemons.GetOneWildPokemon(config.MaxLevel, stdHPDeviation,
+			config.MaxHP, stdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies)-1)])
+		wildPokemon := utils.WildPokemon{
+			Pokemon: pokemon,
+			Location: utils.Location{
+				Latitude:  topLeft.Latitude - rand.Float64()*regionSize,
+				Longitude: topLeft.Longitude + rand.Float64()*regionSize,
+			},
+		}
+		pokemonsArr = append(pokemonsArr, wildPokemon)
+	}
+
+	return pokemonsArr
 }

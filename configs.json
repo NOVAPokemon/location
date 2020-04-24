@@ -2,11 +2,21 @@
   "timeout_interval": 15,
   "ping_interval": 1,
   "update_gyms_interval": 30,
-  "update_pokemon_interval": 60,
+  "update_pokemon_interval": 15,
   "vicinity": 100.0,
-  "interval_generate": 2,
+  "interval_generate": 15,
   "pokemons_to_generate": 10,
+  "max_pokemons_per_region": 100,
   "max_level": 100.0,
   "max_hp": 500.0,
-  "max_damage": 500.0
+  "max_damage": 500.0,
+  "num_regions": 64,
+  "topLeftCorner": {
+    "Latitude": 90.0,
+    "Longitude": -180.0
+  },
+  "botRightCorner": {
+    "Latitude": -90.0,
+    "Longitude": 180.0
+  }
 }

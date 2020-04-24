@@ -8,8 +8,6 @@ import (
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
 	locationdb "github.com/NOVAPokemon/utils/database/location"
-	"github.com/NOVAPokemon/utils/gps"
-	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/location"
@@ -17,7 +15,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net/http"
-	"sync"
 	"time"
 )
 
@@ -28,13 +25,18 @@ const (
 var (
 	timeoutInDuration = time.Duration(config.Timeout) * time.Second
 
-	gyms    []utils.Gym
-	pokemon []pokemons.Pokemon
-
-	httpClient  = &http.Client{}
-	gymsLock    sync.RWMutex
-	pokemonLock sync.RWMutex
+	rm         *RegionManager
+	httpClient = &http.Client{}
 )
+
+func init() {
+
+	gyms, err := locationdb.GetGyms()
+	if err != nil {
+		panic(err)
+	}
+	rm = NewRegionManager(gyms, config.NumRegionsInWorld, config.MaxPokemonsPerRegion, config.NumberOfPokemonsToGenerate, config.TopLeftCorner, config.BotRightCorner)
+}
 
 func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 	var gym utils.Gym
@@ -49,6 +51,7 @@ func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
 }
 
 func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +68,7 @@ func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go handleUserLocationUpdates(authToken.Username, conn)
+	handleUserLocationUpdates(authToken.Username, conn)
 }
 
 func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
@@ -90,34 +93,31 @@ func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	wildPokemons, err := locationdb.GetWildPokemons()
+	regionNr, ok := rm.GetTrainerRegion(authToken.Username)
+
+	if !ok {
+		log.Error("location not being tracked")
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	pokemon, err := rm.RemoveWildPokemonFromRegion(regionNr, request.Pokemon.Id.Hex())
 	if err != nil {
 		log.Error(err)
 		return
 	}
 
-	pokemon := request.Pokemon
-	found := false
-	for _, pokemonRetrieved := range wildPokemons {
-		if pokemon.Id.Hex() == pokemonRetrieved.Id.Hex() {
-			found = true
-			break
-		}
-	}
-
-	if !found {
+	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		log.Error(errors.New(fmt.Sprintf("pokemon %s is not available to catch", pokemon.Id.Hex())))
 		return
 	}
 
-	selectedPokemon := pokemon
-
 	var catchingProbability float64
 	if pokeball.Effect.Value == maxCatchingProbability {
 		catchingProbability = 1
 	} else {
-		catchingProbability = 1 - ((float64(selectedPokemon.Level) / config.MaxLevel) *
+		catchingProbability = 1 - ((float64(pokemon.Level) / config.MaxLevel) *
 			(float64(pokeball.Effect.Value) / maxCatchingProbability))
 	}
 
@@ -145,7 +145,7 @@ func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 
 	log.Info(authToken.Username, " caught: ", caught)
 	var trainersClient = clients.NewTrainersClient(httpClient)
-	_, err = trainersClient.AddPokemonToTrainer(authToken.Username, selectedPokemon)
+	_, err = trainersClient.AddPokemonToTrainer(authToken.Username, *pokemon)
 	if err != nil {
 		log.Error(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -180,14 +180,14 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	go handleMessagesLoop(conn, inChan, finish)
 	for {
 		select {
+		case msg := <-inChan:
+			handleMsg(conn, user, msg)
+			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		case <-pingTicker.C:
 			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				log.Error(err)
 				return
 			}
-		case msg := <-inChan:
-			handleMsg(conn, user, msg)
-			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		case <-finish:
 			log.Info("Stopped tracking location")
 			return
@@ -199,7 +199,7 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 	for {
 		msg, err := clients.ReadMessagesWithoutParse(conn)
 		if err != nil {
-			log.Printf("error: %v", err)
+			log.Error(err)
 			close(finished)
 			return
 		} else {
@@ -212,57 +212,28 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 	switch msg.MsgType {
 	case location.UpdateLocation:
 		locationMsg := location.Deserialize(msg).(*location.UpdateLocationMessage)
+		regionNr, err := rm.SetTrainerLocation(user, locationMsg.Location)
 
-		_, err := locationdb.UpdateIfAbsentAddUserLocation(utils.UserLocation{
-			Username: user,
-			Location: locationMsg.Location,
-		})
 		if err != nil {
 			log.Error(err)
 			return
 		}
-
-		gymsInVicinity := getGymsInVicinity(locationMsg.Location)
-		pokemonInVicinity := getPokemonInVicinity(locationMsg.Location)
-
-		if len(gymsInVicinity) > 0 {
-			gymsMsgString := location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()
-			clients.Send(conn, &gymsMsgString)
+		gymsInVicinity := rm.getGymsInRegion(regionNr)
+		pokemonInVicinity, err := rm.getPokemonsInRegion(regionNr)
+		if err != nil {
+			log.Error(err)
+			return
 		}
+		gymsMsgString := location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()
+		clients.Send(conn, &gymsMsgString)
 
-		if len(pokemonInVicinity) > 0 {
-			pokemonMsgString := location.PokemonMessage{
-				Pokemon: pokemonInVicinity,
-			}.SerializeToWSMessage().Serialize()
-			clients.Send(conn, &pokemonMsgString)
-		}
+		pokemonMsgString := location.PokemonMessage{
+			Pokemon: pokemonInVicinity,
+		}.SerializeToWSMessage().Serialize()
+
+		clients.Send(conn, &pokemonMsgString)
 
 	default:
 		log.Warn("invalid msg type")
 	}
-}
-
-// TODO Discuss ideas to improve this. Maybe reduce the number of times this is calculated.
-func getGymsInVicinity(location utils.Location) []utils.Gym {
-	gymsLock.RLock()
-	defer gymsLock.RUnlock()
-
-	var gymsInVicinity []utils.Gym
-
-	for _, gym := range gyms {
-		distance := gps.CalcDistanceBetweenLocations(location, gym.Location)
-		if distance <= config.Vicinity {
-			gymsInVicinity = append(gymsInVicinity, gym)
-		}
-	}
-
-	return gymsInVicinity
-}
-
-//TODO add filter logic in here
-func getPokemonInVicinity(location utils.Location) []pokemons.Pokemon {
-	pokemonLock.RLock()
-	defer pokemonLock.RUnlock()
-
-	return pokemon
 }
