@@ -25,17 +25,16 @@ const (
 var (
 	timeoutInDuration = time.Duration(config.Timeout) * time.Second
 
-	rm         *RegionManager
+	tm         *TileManager
 	httpClient = &http.Client{}
 )
 
 func init() {
-
 	gyms, err := locationdb.GetGyms()
 	if err != nil {
 		panic(err)
 	}
-	rm = NewRegionManager(gyms, config.NumRegionsInWorld, config.MaxPokemonsPerRegion, config.NumberOfPokemonsToGenerate, config.TopLeftCorner, config.BotRightCorner)
+	tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate, config.TopLeftCorner, config.BotRightCorner)
 }
 
 func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +92,7 @@ func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	regionNr, ok := rm.GetTrainerRegion(authToken.Username)
+	regionNr, ok := tm.GetTrainerTile(authToken.Username)
 
 	if !ok {
 		log.Error("location not being tracked")
@@ -101,7 +100,7 @@ func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pokemon, err := rm.RemoveWildPokemonFromRegion(regionNr, request.Pokemon.Id.Hex())
+	pokemon, err := tm.RemoveWildPokemonFromTile(regionNr, request.Pokemon.Id.Hex())
 	if err != nil {
 		log.Error(err)
 		return
@@ -212,14 +211,14 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 	switch msg.MsgType {
 	case location.UpdateLocation:
 		locationMsg := location.Deserialize(msg).(*location.UpdateLocationMessage)
-		regionNr, err := rm.SetTrainerLocation(user, locationMsg.Location)
+		regionNr, err := tm.SetTrainerLocation(user, locationMsg.Location)
 
 		if err != nil {
 			log.Error(err)
 			return
 		}
-		gymsInVicinity := rm.getGymsInRegion(regionNr)
-		pokemonInVicinity, err := rm.getPokemonsInRegion(regionNr)
+		gymsInVicinity := tm.getGymsInTile(regionNr)
+		pokemonInVicinity, err := tm.getPokemonsInTile(regionNr)
 		if err != nil {
 			log.Error(err)
 			return

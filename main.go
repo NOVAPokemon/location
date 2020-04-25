@@ -80,7 +80,7 @@ func loadConfig() *LocationServerConfig {
 		return nil
 	}
 
-	if !isPerfectSquare(config.NumRegionsInWorld) {
+	if !isPerfectSquare(config.tilesInWorld) {
 		log.Panic("Number of regions is not a perfect square (i.e. 4, 9, 16...)")
 	}
 
