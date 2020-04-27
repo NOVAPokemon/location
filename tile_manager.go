@@ -43,7 +43,7 @@ var gymsLock sync.RWMutex
 func NewTileManager(gyms []utils.Gym, numTiles int, maxPokemonsPerTile int, pokemonsPerGeneration int, topLeft utils.Location, botRight utils.Location) *TileManager {
 
 	numTilesPerAxis := int(math.Sqrt(float64(numTiles)))
-	tileSide := int(360.0 / numTilesPerAxis)
+	tileSide := 360.0 / numTilesPerAxis
 	toReturn := &TileManager{
 		NumTilesInWorld:          numTiles,
 		TopLeftCorner:            topLeft,
