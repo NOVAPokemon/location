@@ -15,6 +15,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"math/rand"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -24,8 +25,9 @@ const (
 
 var (
 	timeoutInDuration = time.Duration(config.Timeout) * time.Second
+	tm                *TileManager
 
-	tm         *TileManager
+	tmLock     = sync.RWMutex{}
 	httpClient = &http.Client{}
 )
 
@@ -34,7 +36,9 @@ func init() {
 	if err != nil {
 		panic(err)
 	}
+	tmLock.Lock()
 	tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate, config.TopLeftCorner, config.BotRightCorner)
+	tmLock.Unlock()
 }
 
 func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
@@ -45,12 +49,21 @@ func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = locationdb.AddGym(gym)
-	if err != nil {
+	if err = tm.AddGym(gym); err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	if err := locationdb.AddGym(gym); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
+	if err = tm.AddGym(gym); err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
 
 func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +81,16 @@ func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handleUserLocationUpdates(authToken.Username, conn)
+}
+
+func HandleSetArea(_ http.ResponseWriter, _ *http.Request) {
+	gyms, err := locationdb.GetGyms()
+	if err != nil {
+		panic(err)
+	}
+	tmLock.Lock()
+	tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate, config.TopLeftCorner, config.BotRightCorner)
+	tmLock.Unlock()
 }
 
 func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
@@ -211,6 +234,7 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 	switch msg.MsgType {
 	case location.UpdateLocation:
 		locationMsg := location.Deserialize(msg).(*location.UpdateLocationMessage)
+		tmLock.RLock()
 		regionNr, err := tm.SetTrainerLocation(user, locationMsg.Location)
 
 		if err != nil {
@@ -223,6 +247,7 @@ func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
 			log.Error(err)
 			return
 		}
+		tmLock.RUnlock()
 		gymsMsgString := location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()
 		clients.Send(conn, &gymsMsgString)
 

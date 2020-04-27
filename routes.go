@@ -40,5 +40,6 @@ var routes = utils.Routes{
 		Name:    SetRegionAreaName,
 		Method:  POST,
 		Pattern: api.SetRegionAreaPath,
+		HandlerFunc: HandleSetArea,
 	},
 }

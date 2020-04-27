@@ -2,8 +2,8 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"github.com/NOVAPokemon/utils"
-	locationdb "github.com/NOVAPokemon/utils/database/location"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/golang/geo/s2"
 	"github.com/sirupsen/logrus"
@@ -103,11 +103,6 @@ func (rm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 	}
 	rm.trainerTile[trainerId] = tileNr
 	return tileNr, nil
-}
-
-func (rm *TileManager) isBorderTile(topLeft utils.Location, botRight utils.Location) bool {
-	return topLeft.Longitude == rm.TopLeftCorner.Longitude || topLeft.Latitude == rm.TopLeftCorner.Latitude ||
-		botRight.Latitude == rm.TopLeftCorner.Latitude || botRight.Longitude == rm.BotRightCorner.Longitude
 }
 
 func (rm *TileManager) RemoveTrainerLocation(trainerId string) error {
@@ -217,27 +212,6 @@ func (rm *TileManager) cleanWildPokemons(tileNr int) {
 	}
 }
 
-func (rm *TileManager) logTileManagerState() {
-	log.Infof("Number of active tiles: %d", len(rm.activeTiles))
-	log.Infof("Number of active users: %d", len(rm.trainerTile))
-	for tileNr, tile := range rm.activeTiles {
-		log.Infof("---------------------Tile %d---------------------", tileNr)
-		log.Infof("Tile bounds TopLeft:%+v, TopRight:%+v", tile.TopLeftCorner, tile.BotRightCorner)
-		log.Info("Number of active users: ", tile.nrTrainers)
-		log.Info("Number of generated pokemons: ", len(tile.pokemons))
-		log.Info("Number of gyms: ", len(rm.gymsFromTile[tileNr]))
-
-		//for i, pokemon := range tile.pokemons {
-		//	log.Infof("Wild pokemon %d location: %+v", i, pokemon.Location)
-		//}
-
-		for _, gym := range rm.gymsFromTile[tileNr] {
-			log.Infof("Gym %s location: %+v", gym.Name, gym.Location)
-		}
-
-	}
-}
-
 func (rm *TileManager) RemoveWildPokemonFromTile(tileNr int, pokemonId string) (*pokemons.Pokemon, error) {
 	tile, ok := rm.activeTiles[tileNr]
 	if !ok {
@@ -292,10 +266,6 @@ func (rm *TileManager) LoadGyms(gyms []utils.Gym) {
 	for _, gym := range gyms {
 
 		if isWithinBounds(gym.Location, rm.TopLeftCorner, rm.BotRightCorner) {
-			log.Infof("Adding gym %s", gym.Name)
-			if err := locationdb.AddGym(gym); err != nil {
-				log.Error("Error adding gym")
-			}
 			tileNr, err := GetTileNrFromLocation(gym.Location, rm.numTilesPerAxis, rm.tileSideLength)
 			if err != nil {
 				log.Error(err)
@@ -321,4 +291,45 @@ func isWithinBounds(location utils.Location, topLeft utils.Location, botRight ut
 		return false
 	}
 	return true
+}
+
+func (rm *TileManager) isBorderTile(topLeft utils.Location, botRight utils.Location) bool {
+	return topLeft.Longitude == rm.TopLeftCorner.Longitude || topLeft.Latitude == rm.TopLeftCorner.Latitude ||
+		botRight.Latitude == rm.TopLeftCorner.Latitude || botRight.Longitude == rm.BotRightCorner.Longitude
+}
+
+func (rm *TileManager) logTileManagerState() {
+	log.Infof("Number of active tiles: %d", len(rm.activeTiles))
+	log.Infof("Number of active users: %d", len(rm.trainerTile))
+	for tileNr, tile := range rm.activeTiles {
+		log.Infof("---------------------Tile %d---------------------", tileNr)
+		log.Infof("Tile bounds TopLeft:%+v, TopRight:%+v", tile.TopLeftCorner, tile.BotRightCorner)
+		log.Info("Number of active users: ", tile.nrTrainers)
+		log.Info("Number of generated pokemons: ", len(tile.pokemons))
+		log.Info("Number of gyms: ", len(rm.gymsFromTile[tileNr]))
+
+		//for i, pokemon := range tile.pokemons {
+		//	log.Infof("Wild pokemon %d location: %+v", i, pokemon.Location)
+		//}
+
+		for _, gym := range rm.gymsFromTile[tileNr] {
+			log.Infof("Gym %s location: %+v", gym.Name, gym.Location)
+		}
+
+	}
+}
+
+func (rm *TileManager) AddGym(gym utils.Gym) error {
+	if isWithinBounds(gym.Location, rm.TopLeftCorner, rm.BotRightCorner) {
+		log.Infof("Adding gym %s", gym.Name)
+		tileNr, err := GetTileNrFromLocation(gym.Location, rm.numTilesPerAxis, rm.tileSideLength)
+		if err != nil {
+			log.Error(err)
+			return err
+		}
+		rm.gymsFromTile[tileNr] = append(rm.gymsFromTile[tileNr], gym)
+		return nil
+	} else {
+		return errors.New(fmt.Sprintf("Gym %s out of bounds", gym.Name))
+	}
 }
