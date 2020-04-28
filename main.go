@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/gorilla/websocket"
@@ -10,7 +9,6 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
-	"net/http"
 	"time"
 )
 
@@ -20,6 +18,8 @@ const (
 
 	PokemonsFilename = "pokemons.json"
 	configFilename   = "configs.json"
+
+	serviceName = "LOCATION"
 )
 
 var (
@@ -32,17 +32,12 @@ var (
 )
 
 func main() {
-	addr := fmt.Sprintf("%s:%d", host, port)
+	utils.CheckLogFlag(serviceName)
+
 	pokemonSpecies = loadPokemonSpecies()
-
-	rand.Seed(time.Now().Unix())
-
-	r := utils.NewRouter(routes)
-
 	time.Sleep(2 * time.Second)
 
-	log.Infof("Starting LOCATION server in port %d...\n", port)
-	log.Fatal(http.ListenAndServe(addr, r))
+	utils.StartServer(serviceName, host, port, routes)
 }
 
 // Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
