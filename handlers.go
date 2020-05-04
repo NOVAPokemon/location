@@ -24,20 +24,22 @@ const (
 )
 
 var (
-	timeoutInDuration = time.Duration(config.Timeout) * time.Second
-	tm                *TileManager
+	tm *TileManager
 
-	tmLock     = sync.RWMutex{}
-	httpClient = &http.Client{}
+	timeoutInDuration = time.Duration(config.Timeout) * time.Second
+	tmLock            = sync.RWMutex{}
+	httpClient        = &http.Client{}
 )
 
 func init() {
 	gyms, err := locationdb.GetGyms()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
+
 	tmLock.Lock()
-	tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate, config.TopLeftCorner, config.BotRightCorner)
+	tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
+		config.TopLeftCorner, config.BotRightCorner)
 	tmLock.Unlock()
 }
 
@@ -45,23 +47,25 @@ func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 	var gym utils.Gym
 	err := json.NewDecoder(r.Body).Decode(&gym)
 	if err != nil {
-		log.Error(err)
+		log.Error(wrapAddGymError(err))
 		return
 	}
 
-	if err = tm.AddGym(gym); err != nil {
-		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-
-	if err := locationdb.AddGym(gym); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	err = tm.AddGym(gym)
+	if err != nil {
+		utils.LogAndSendHTTPError(&w, wrapAddGymError(err), http.StatusInternalServerError)
 		return
 	}
 
-	if err = tm.AddGym(gym); err != nil {
-		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+	err = locationdb.AddGym(gym)
+	if err != nil {
+		utils.LogAndSendHTTPError(&w, wrapAddGymError(err), http.StatusInternalServerError)
+		return
+	}
+
+	err = tm.AddGym(gym)
+	if err != nil {
+		utils.LogAndSendHTTPError(&w, wrapAddGymError(err), http.StatusInternalServerError)
 		return
 	}
 }
@@ -69,69 +73,70 @@ func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Error(err)
-		w.WriteHeader(http.StatusUnauthorized)
+		err = wrapUserLocationError(utils.ErrorConnectionUpgrade)
+		utils.LogAndSendHTTPError(&w, err, http.StatusUnauthorized)
 		return
 	}
 
 	authToken, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
-		w.WriteHeader(http.StatusUnauthorized)
+		utils.LogAndSendHTTPError(&w, wrapUserLocationError(err), http.StatusUnauthorized)
 		return
 	}
 
 	handleUserLocationUpdates(authToken.Username, conn)
 }
 
-func HandleSetArea(_ http.ResponseWriter, _ *http.Request) {
+func HandleSetArea(w http.ResponseWriter, _ *http.Request) {
 	gyms, err := locationdb.GetGyms()
 	if err != nil {
-		panic(err)
+		utils.LogAndSendHTTPError(&w, wrapSetAreaError(), http.StatusInternalServerError)
+		return
 	}
+
 	tmLock.Lock()
-	tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate, config.TopLeftCorner, config.BotRightCorner)
+	tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
+		config.TopLeftCorner, config.BotRightCorner)
 	tmLock.Unlock()
 }
 
 func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 	authToken, err := tokens.ExtractAndVerifyAuthToken(r.Header)
 	if err != nil {
-		log.Error("no auth token")
-		w.WriteHeader(http.StatusUnauthorized)
+		utils.LogAndSendHTTPError(&w, wrapCatchWildPokemonError(err), http.StatusUnauthorized)
 		return
 	}
 
 	var request api.CatchWildPokemonRequest
 	err = json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
-		log.Error(err)
+		utils.LogAndSendHTTPError(&w, wrapCatchWildPokemonError(err), http.StatusInternalServerError)
 		return
 	}
 
 	pokeball := request.Pokeball
 	if !pokeball.IsPokeBall() {
-		log.Error("invalid item to catch")
-		w.WriteHeader(http.StatusBadRequest)
+		err = wrapCatchWildPokemonError(errorInvalidItemCatch)
+		utils.LogAndSendHTTPError(&w, err, http.StatusInternalServerError)
 		return
 	}
 
 	regionNr, ok := tm.GetTrainerTile(authToken.Username)
-
 	if !ok {
-		log.Error("location not being tracked")
-		w.WriteHeader(http.StatusBadRequest)
+		err = wrapCatchWildPokemonError(errorLocationNotTracked)
+		utils.LogAndSendHTTPError(&w, err, http.StatusBadRequest)
 		return
 	}
 
 	pokemon, err := tm.RemoveWildPokemonFromTile(regionNr, request.Pokemon.Id.Hex())
 	if err != nil {
-		log.Error(err)
+		utils.LogAndSendHTTPError(&w, wrapCatchWildPokemonError(err), http.StatusInternalServerError)
 		return
 	}
 
 	if !ok {
-		w.WriteHeader(http.StatusNotFound)
-		log.Error(errors.New(fmt.Sprintf("pokemon %s is not available to catch", pokemon.Id.Hex())))
+		err = wrapCatchWildPokemonError(newPokemonNotAvailable(pokemon.Id.Hex()))
+		utils.LogAndSendHTTPError(&w, err, http.StatusBadRequest)
 		return
 	}
 
@@ -152,15 +157,14 @@ func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 
 	jsonBytes, err := json.Marshal(caughtMessage)
 	if err != nil {
-		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		utils.LogAndSendHTTPError(&w, wrapCatchWildPokemonError(err), http.StatusInternalServerError)
 		return
 	}
 
 	if !caught {
 		_, err = w.Write(jsonBytes)
 		if err != nil {
-			log.Error(err)
+			utils.LogAndSendHTTPError(&w, wrapCatchWildPokemonError(err), http.StatusInternalServerError)
 		}
 		return
 	}
@@ -169,8 +173,7 @@ func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 	var trainersClient = clients.NewTrainersClient(httpClient)
 	_, err = trainersClient.AddPokemonToTrainer(authToken.Username, *pokemon)
 	if err != nil {
-		log.Error(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		utils.LogAndSendHTTPError(&w, wrapCatchWildPokemonError(err), http.StatusInternalServerError)
 		return
 	}
 
@@ -182,7 +185,7 @@ func HandleCatchWildPokemon(w http.ResponseWriter, r *http.Request) {
 	w.Header()[tokens.PokemonsTokenHeaderName] = pokemonTokens
 	_, err = w.Write(jsonBytes)
 	if err != nil {
-		log.Error(err)
+		utils.LogAndSendHTTPError(&w, wrapCatchWildPokemonError(err), http.StatusInternalServerError)
 	}
 }
 
@@ -200,14 +203,19 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	finish := make(chan struct{})
 
 	go handleMessagesLoop(conn, inChan, finish)
+
 	for {
 		select {
 		case msg := <-inChan:
-			handleMsg(conn, user, msg)
+			err := handleLocationMsg(conn, user, msg)
+			if err != nil {
+				log.Error(err)
+			}
+
 			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		case <-pingTicker.C:
 			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
-				log.Error(err)
+				log.Error(ws.WrapWritingMessageError(err))
 				return
 			}
 		case <-finish:
@@ -219,7 +227,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished chan struct{}) {
 	for {
-		msg, err := clients.ReadMessagesWithoutParse(conn)
+		msg, err := clients.Read(conn)
 		if err != nil {
 			log.Error(err)
 			close(finished)
@@ -230,34 +238,41 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 	}
 }
 
-func handleMsg(conn *websocket.Conn, user string, msg *ws.Message) {
+func handleLocationMsg(conn *websocket.Conn, user string, msg *ws.Message) error {
 	switch msg.MsgType {
 	case location.UpdateLocation:
 		locationMsg := location.Deserialize(msg).(*location.UpdateLocationMessage)
 		tmLock.RLock()
-		regionNr, err := tm.SetTrainerLocation(user, locationMsg.Location)
 
+		regionNr, err := tm.SetTrainerLocation(user, locationMsg.Location)
 		if err != nil {
-			log.Error(err)
-			return
+			return wrapHandleLocationMsgs(err)
 		}
+
 		gymsInVicinity := tm.getGymsInTile(regionNr)
 		pokemonInVicinity, err := tm.getPokemonsInTile(regionNr)
 		if err != nil {
-			log.Error(err)
-			return
+			return wrapHandleLocationMsgs(err)
 		}
+
 		tmLock.RUnlock()
+
 		gymsMsgString := location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()
-		clients.Send(conn, &gymsMsgString)
+
+		err = clients.Send(conn, &gymsMsgString)
+		if err != nil {
+			return wrapHandleLocationMsgs(err)
+		}
 
 		pokemonMsgString := location.PokemonMessage{
 			Pokemon: pokemonInVicinity,
 		}.SerializeToWSMessage().Serialize()
 
-		clients.Send(conn, &pokemonMsgString)
-
+		err = clients.Send(conn, &pokemonMsgString)
+		if err != nil {
+			return wrapHandleLocationMsgs(err)
+		}
 	default:
-		log.Warn("invalid msg type")
+		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
 	}
 }
