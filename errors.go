@@ -8,6 +8,8 @@ import (
 
 const (
 	errorHandleLocationMsg = "error handling location message"
+
+	errorPokemonNotCatchableFormat = "pokemon %s is not available to catch"
 )
 
 var (
@@ -39,5 +41,5 @@ func wrapHandleLocationMsgs(err error) error {
 
 // Error builders
 func newPokemonNotAvailable(pokemonId string) error {
-	return errors.New(fmt.Sprintf("pokemon %s is not available to catch", pokemonId))
+	return errors.New(fmt.Sprintf(errorPokemonNotCatchableFormat, pokemonId))
 }
