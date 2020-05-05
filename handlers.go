@@ -2,8 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
@@ -90,7 +88,7 @@ func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
 func HandleSetArea(w http.ResponseWriter, _ *http.Request) {
 	gyms, err := locationdb.GetGyms()
 	if err != nil {
-		utils.LogAndSendHTTPError(&w, wrapSetAreaError(), http.StatusInternalServerError)
+		utils.LogAndSendHTTPError(&w, wrapSetAreaError(err), http.StatusInternalServerError)
 		return
 	}
 
@@ -272,6 +270,8 @@ func handleLocationMsg(conn *websocket.Conn, user string, msg *ws.Message) error
 		if err != nil {
 			return wrapHandleLocationMsgs(err)
 		}
+
+		return nil
 	default:
 		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
 	}
