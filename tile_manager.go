@@ -148,7 +148,7 @@ func (rm *TileManager) getPokemonsInTile(tileNr int) ([]utils.WildPokemon, error
 	if !ok {
 		return nil, errors.New("tile is nil")
 	}
-	pokemonsLock := tile.pokemonLock
+	pokemonsLock := &tile.pokemonLock
 	defer pokemonsLock.RUnlock()
 	pokemonsLock.RLock()
 	pokemonsInTile := tile.pokemons
@@ -190,7 +190,7 @@ func (rm *TileManager) getGymsInTile(tileNr int) []utils.Gym {
 func (rm *TileManager) generateWildPokemonsForZonePeriodically(zoneNr int) {
 	for tile, ok := rm.activeTiles[zoneNr]; ok && tile.nrTrainers != 0; {
 		log.Info("Refreshing wild pokemons...")
-		pokemonLock := tile.pokemonLock
+		pokemonLock := &tile.pokemonLock
 		pokemonLock.Lock()
 		nrToGenerate := rm.maxPokemonsPerTile - len(tile.pokemons)
 		if nrToGenerate > rm.maxPokemonsPerGeneration {
@@ -217,7 +217,7 @@ func (rm *TileManager) RemoveWildPokemonFromTile(tileNr int, pokemonId string) (
 	if !ok {
 		return nil, errors.New("tile is nil")
 	}
-	pokemonLock := tile.pokemonLock
+	pokemonLock := &tile.pokemonLock
 	pokemonLock.Lock()
 	defer pokemonLock.Unlock()
 
