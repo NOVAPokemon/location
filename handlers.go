@@ -71,7 +71,7 @@ func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		err = wrapUserLocationError(utils.ErrorConnectionUpgrade)
+		err = wrapUserLocationError(ws.WrapUpgradeConnectionError(err))
 		utils.LogAndSendHTTPError(&w, err, http.StatusUnauthorized)
 		return
 	}
@@ -239,7 +239,12 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 func handleLocationMsg(conn *websocket.Conn, user string, msg *ws.Message) error {
 	switch msg.MsgType {
 	case location.UpdateLocation:
-		locationMsg := location.Deserialize(msg).(*location.UpdateLocationMessage)
+		desMsg, err := location.Deserialize(msg)
+		if err != nil {
+			return wrapHandleLocationMsgs(err)
+		}
+
+		locationMsg := desMsg.(*location.UpdateLocationMessage)
 		tmLock.RLock()
 
 		regionNr, err := tm.SetTrainerLocation(user, locationMsg.Location)
