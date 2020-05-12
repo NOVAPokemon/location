@@ -16,8 +16,9 @@ const (
 	host = utils.ServeHost
 	port = utils.LocationPort
 
-	PokemonsFilename = "pokemons.json"
-	configFilename   = "configs.json"
+	PokemonsFilename            = "pokemons.json"
+	configFilename              = "configs.json"
+	DefaultServerBoundariesFile = "default_server_locations.json"
 
 	serviceName = "LOCATION"
 )

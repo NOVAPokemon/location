@@ -1,0 +1,46 @@
+[
+  {
+    "ServerName": "location-app-0",
+    "TopLeftCorner": {
+      "Latitude": 85.05115,
+      "Longitude": -180.0
+    },
+    "BotRightCorner": {
+      "Latitude": 0.0,
+      "Longitude": 0.0
+    }
+  },
+  {
+    "ServerName": "location-app-1",
+    "TopLeftCorner": {
+      "Latitude": 85.05115,
+      "Longitude": 0.0
+    },
+    "BotRightCorner": {
+      "Latitude": 0.0,
+      "Longitude": 180.0
+    }
+  },
+  {
+    "ServerName": "location-app-2",
+    "TopLeftCorner": {
+      "Latitude": 0.0,
+      "Longitude": -180.0
+    },
+    "BotRightCorner": {
+      "Latitude": -85.05115,
+      "Longitude": 0.0
+    }
+  },
+  {
+    "ServerName": "location-app-3",
+    "TopLeftCorner": {
+      "Latitude": 0.0,
+      "Longitude": 0.0
+    },
+    "BotRightCorner": {
+      "Latitude": -85.05115,
+      "Longitude": 180.0
+    }
+  }
+]

@@ -8,10 +8,15 @@ import (
 const UserLocationName = "USER_LOCATION"
 const AddGymLocationName = "GYM_LOCATION"
 const CatchWildPokemonName = "CATCH_WILD_POKEMON"
-const SetRegionAreaName = "SET_REGION"
+
+const GetGlobalRegionConfigName = "GET_GLOBAL_SERVER_CONFIG"
+const GetServerForLocationName = "GET_SERVER_FOR_LOCATION"
+const SetServerConfigsName = "SET_SERVER_CONFIG"
+const ForceLoadConfigName = "RELOAD_SERVER_CONFIG"
 
 const GET = "GET"
 const POST = "POST"
+const PUT = "PUT"
 
 var routes = utils.Routes{
 	api.DefaultRoute,
@@ -37,9 +42,30 @@ var routes = utils.Routes{
 	},
 
 	utils.Route{
-		Name:    SetRegionAreaName,
-		Method:  POST,
-		Pattern: api.SetRegionAreaPath,
-		HandlerFunc: HandleSetArea,
+		Name:        GetServerForLocationName,
+		Method:      GET,
+		Pattern:     api.GetServerForLocationRoute,
+		HandlerFunc: HandleGetServerForLocation,
+	},
+
+	utils.Route{
+		Name:        SetServerConfigsName,
+		Method:      PUT,
+		Pattern:     api.SetServerConfigRoute,
+		HandlerFunc: HandleSetServerConfigs,
+	},
+
+	utils.Route{
+		Name:        GetGlobalRegionConfigName,
+		Method:      GET,
+		Pattern:     api.GetAllConfigsRoute,
+		HandlerFunc: HandleGetGlobalRegionSettings,
+	},
+
+	utils.Route{
+		Name:        ForceLoadConfigName,
+		Method:      GET,
+		Pattern:     api.ForceLoadConfigRoute,
+		HandlerFunc: HandleForceLoadConfig,
 	},
 }

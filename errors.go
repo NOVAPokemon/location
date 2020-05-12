@@ -7,9 +7,10 @@ import (
 )
 
 const (
-	errorHandleLocationMsg = "error handling location message"
-
+	errorHandleLocationMsg         = "error handling location message"
+	errorLoadServerBoundaries      = "error loading server boundaries"
 	errorPokemonNotCatchableFormat = "pokemon %s is not available to catch"
+	errorInit                      = "error in INIT"
 )
 
 var (
@@ -26,17 +27,33 @@ func wrapUserLocationError(err error) error {
 	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, UserLocationName))
 }
 
-func wrapSetAreaError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, SetRegionAreaName))
-}
-
 func wrapCatchWildPokemonError(err error) error {
 	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, CatchWildPokemonName))
+}
+
+func wrapSetServerConfigsError(err error) error {
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, SetServerConfigsName))
+}
+
+func wrapGetAllConfigs(err error) error {
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, GetGlobalRegionConfigName))
+}
+
+func wrapGetServerForLocation(err error) error {
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, GetServerForLocationName))
 }
 
 // Wrappers other functions
 func wrapHandleLocationMsgs(err error) error {
 	return errors.Wrap(err, errorHandleLocationMsg)
+}
+
+func WrapInit(err error) error {
+	return errors.Wrap(err, errorInit)
+}
+
+func WrapLoadServerBoundaries(err error) error {
+	return errors.Wrap(err, errorLoadServerBoundaries)
 }
 
 // Error builders

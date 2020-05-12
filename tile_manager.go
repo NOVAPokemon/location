@@ -59,21 +59,21 @@ func NewTileManager(gyms []utils.Gym, numTiles int, maxPokemonsPerTile int, poke
 	return toReturn
 }
 
-func (rm *TileManager) SetTrainerLocation(trainerId string, location utils.Location) (int, error) {
-	rm.logTileManagerState()
+func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Location) (int, error) {
+	tm.logTileManagerState()
 
-	if !isWithinBounds(location, rm.TopLeftCorner, rm.BotRightCorner) {
+	if !isWithinBounds(location, tm.TopLeftCorner, tm.BotRightCorner) {
 		return -1, errors.New("out of bounds of the server")
 	}
 
-	tileNr, err := GetTileNrFromLocation(location, rm.numTilesPerAxis, rm.tileSideLength)
+	tileNr, err := GetTileNrFromLocation(location, tm.numTilesPerAxis, tm.tileSideLength)
 
 	if err != nil {
 		log.Error(err)
 		return -1, err
 	}
 
-	lastTile, ok := rm.trainerTile[trainerId]
+	lastTile, ok := tm.trainerTile[trainerId]
 	if ok {
 		if lastTile == tileNr {
 			//user remained in the same tile, no need to check if tile exists because tiles cant be deleted with
@@ -83,68 +83,68 @@ func (rm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 		}
 	}
 
-	tile, ok := rm.activeTiles[tileNr]
+	tile, ok := tm.activeTiles[tileNr]
 
 	if ok {
 		log.Infof("Trainer joined an already created zone (%d)", tileNr)
 	} else {
 		// no tile initialized for user
 		logrus.Infof("Created new tile (%d) for trainer: %s", tileNr, trainerId)
-		topLeft, botRight := rm.GetTileBoundsFromTileNr(tileNr)
+		topLeft, botRight := tm.GetTileBoundsFromTileNr(tileNr)
 		tile = &Tile{
 			nrTrainers:     1,
-			pokemons:       make([]utils.WildPokemon, 0, rm.maxPokemonsPerTile),
-			borderTile:     rm.isBorderTile(topLeft, botRight),
+			pokemons:       make([]utils.WildPokemon, 0, tm.maxPokemonsPerTile),
+			borderTile:     tm.isBorderTile(topLeft, botRight),
 			BotRightCorner: botRight,
 			TopLeftCorner:  topLeft,
 		}
-		rm.activeTiles[tileNr] = tile
-		go rm.generateWildPokemonsForZonePeriodically(tileNr)
+		tm.activeTiles[tileNr] = tile
+		go tm.generateWildPokemonsForZonePeriodically(tileNr)
 	}
-	rm.trainerTile[trainerId] = tileNr
+	tm.trainerTile[trainerId] = tileNr
 	return tileNr, nil
 }
 
-func (rm *TileManager) RemoveTrainerLocation(trainerId string) error {
-	tileNr, ok := rm.trainerTile[trainerId]
+func (tm *TileManager) RemoveTrainerLocation(trainerId string) error {
+	tileNr, ok := tm.trainerTile[trainerId]
 	if !ok {
 		return errors.New("user was not being tracked")
 	}
 
-	if tile, ok := rm.activeTiles[tileNr]; ok {
+	if tile, ok := tm.activeTiles[tileNr]; ok {
 		tile.nrTrainers--
 		if tile.nrTrainers == 0 {
 			log.Warnf("Disabling tile %d", tileNr)
-			delete(rm.activeTiles, tileNr)
+			delete(tm.activeTiles, tileNr)
 		}
 	}
 
-	delete(rm.trainerTile, trainerId)
+	delete(tm.trainerTile, trainerId)
 	return nil
 }
 
-func (rm *TileManager) GetTileBoundsFromTileNr(tileNr int) (topLeft utils.Location, botRight utils.Location) {
+func (tm *TileManager) GetTileBoundsFromTileNr(tileNr int) (topLeft utils.Location, botRight utils.Location) {
 
 	topLeft = utils.Location{
-		Longitude: float64((tileNr%rm.numTilesPerAxis)*rm.tileSideLength) - 180,
-		Latitude:  180 - float64(tileNr/rm.numTilesPerAxis*rm.tileSideLength),
+		Longitude: float64((tileNr%tm.numTilesPerAxis)*tm.tileSideLength) - 180,
+		Latitude:  180 - float64(tileNr/tm.numTilesPerAxis*tm.tileSideLength),
 	}
 
 	botRight = utils.Location{
-		Latitude:  topLeft.Latitude - float64(rm.tileSideLength),
-		Longitude: topLeft.Longitude + float64(rm.tileSideLength),
+		Latitude:  topLeft.Latitude - float64(tm.tileSideLength),
+		Longitude: topLeft.Longitude + float64(tm.tileSideLength),
 	}
 
 	return topLeft, botRight
 }
 
-func (rm *TileManager) GetTrainerTile(trainerId string) (int, bool) {
-	tileNr, ok := rm.trainerTile[trainerId]
+func (tm *TileManager) GetTrainerTile(trainerId string) (int, bool) {
+	tileNr, ok := tm.trainerTile[trainerId]
 	return tileNr, ok
 }
 
-func (rm *TileManager) getPokemonsInTile(tileNr int) ([]utils.WildPokemon, error) {
-	tile, ok := rm.activeTiles[tileNr]
+func (tm *TileManager) getPokemonsInTile(tileNr int) ([]utils.WildPokemon, error) {
+	tile, ok := tm.activeTiles[tileNr]
 	if !ok {
 		return nil, errors.New("tile is nil")
 	}
@@ -167,9 +167,9 @@ func (rm *TileManager) getPokemonsInTile(tileNr int) ([]utils.WildPokemon, error
 	return pokemonsInTile, nil
 }
 
-func (rm *TileManager) getGymsInTile(tileNr int) []utils.Gym {
+func (tm *TileManager) getGymsInTile(tileNr int) []utils.Gym {
 	gymsLock.RLock()
-	gymsInTile, ok := rm.gymsFromTile[tileNr]
+	gymsInTile, ok := tm.gymsFromTile[tileNr]
 	gymsLock.RUnlock()
 
 	if !ok {
@@ -187,14 +187,14 @@ func (rm *TileManager) getGymsInTile(tileNr int) []utils.Gym {
 	return gymsInTile
 }
 
-func (rm *TileManager) generateWildPokemonsForZonePeriodically(zoneNr int) {
-	for tile, ok := rm.activeTiles[zoneNr]; ok && tile.nrTrainers != 0; {
+func (tm *TileManager) generateWildPokemonsForZonePeriodically(zoneNr int) {
+	for tile, ok := tm.activeTiles[zoneNr]; ok && tile.nrTrainers != 0; {
 		log.Info("Refreshing wild pokemons...")
 		pokemonLock := &tile.pokemonLock
 		pokemonLock.Lock()
-		nrToGenerate := rm.maxPokemonsPerTile - len(tile.pokemons)
-		if nrToGenerate > rm.maxPokemonsPerGeneration {
-			nrToGenerate = rm.maxPokemonsPerGeneration
+		nrToGenerate := tm.maxPokemonsPerTile - len(tile.pokemons)
+		if nrToGenerate > tm.maxPokemonsPerGeneration {
+			nrToGenerate = tm.maxPokemonsPerGeneration
 		}
 		wildPokemons := generateWildPokemons(nrToGenerate, pokemonSpecies, tile.TopLeftCorner, tile.BotRightCorner)
 		tile.pokemons = append(tile.pokemons, wildPokemons...)
@@ -205,15 +205,15 @@ func (rm *TileManager) generateWildPokemonsForZonePeriodically(zoneNr int) {
 	log.Warnf("Stopped generating pokemons for zone %d", zoneNr)
 }
 
-func (rm *TileManager) cleanWildPokemons(tileNr int) {
-	tile, ok := rm.activeTiles[tileNr]
+func (tm *TileManager) cleanWildPokemons(tileNr int) {
+	tile, ok := tm.activeTiles[tileNr]
 	if ok {
 		tile.pokemons = make([]utils.WildPokemon, 0)
 	}
 }
 
-func (rm *TileManager) RemoveWildPokemonFromTile(tileNr int, pokemonId string) (*pokemons.Pokemon, error) {
-	tile, ok := rm.activeTiles[tileNr]
+func (tm *TileManager) RemoveWildPokemonFromTile(tileNr int, pokemonId string) (*pokemons.Pokemon, error) {
+	tile, ok := tm.activeTiles[tileNr]
 	if !ok {
 		return nil, errors.New("tile is nil")
 	}
@@ -259,25 +259,25 @@ func GetTileNrFromLocation(location utils.Location, numTilesPerAxis int, tileSid
 	return tileNr, nil
 }
 
-func (rm *TileManager) LoadGyms(gyms []utils.Gym) {
+func (tm *TileManager) LoadGyms(gyms []utils.Gym) {
 
-	rm.gymsFromTile = make(map[int][]utils.Gym, len(gyms))
+	tm.gymsFromTile = make(map[int][]utils.Gym, len(gyms))
 
 	for _, gym := range gyms {
 
-		if isWithinBounds(gym.Location, rm.TopLeftCorner, rm.BotRightCorner) {
-			tileNr, err := GetTileNrFromLocation(gym.Location, rm.numTilesPerAxis, rm.tileSideLength)
+		if isWithinBounds(gym.Location, tm.TopLeftCorner, tm.BotRightCorner) {
+			tileNr, err := GetTileNrFromLocation(gym.Location, tm.numTilesPerAxis, tm.tileSideLength)
 			if err != nil {
 				log.Error(err)
 				continue
 			}
-			rm.gymsFromTile[tileNr] = append(rm.gymsFromTile[tileNr], gym)
+			tm.gymsFromTile[tileNr] = append(tm.gymsFromTile[tileNr], gym)
 		} else {
 			log.Infof("Gym %s out of bounds", gym.Name)
 		}
 	}
 
-	for tileNr, gyms := range rm.gymsFromTile {
+	for tileNr, gyms := range tm.gymsFromTile {
 		log.Infof("Tile %d gyms: %+v", tileNr, gyms)
 	}
 }
@@ -293,43 +293,49 @@ func isWithinBounds(location utils.Location, topLeft utils.Location, botRight ut
 	return true
 }
 
-func (rm *TileManager) isBorderTile(topLeft utils.Location, botRight utils.Location) bool {
-	return topLeft.Longitude == rm.TopLeftCorner.Longitude || topLeft.Latitude == rm.TopLeftCorner.Latitude ||
-		botRight.Latitude == rm.TopLeftCorner.Latitude || botRight.Longitude == rm.BotRightCorner.Longitude
+func (tm *TileManager) isBorderTile(topLeft utils.Location, botRight utils.Location) bool {
+	return topLeft.Longitude == tm.TopLeftCorner.Longitude || topLeft.Latitude == tm.TopLeftCorner.Latitude ||
+		botRight.Latitude == tm.TopLeftCorner.Latitude || botRight.Longitude == tm.BotRightCorner.Longitude
 }
 
-func (rm *TileManager) logTileManagerState() {
-	log.Infof("Number of active tiles: %d", len(rm.activeTiles))
-	log.Infof("Number of active users: %d", len(rm.trainerTile))
-	for tileNr, tile := range rm.activeTiles {
+func (tm *TileManager) logTileManagerState() {
+	log.Infof("Number of active tiles: %d", len(tm.activeTiles))
+	log.Infof("Number of active users: %d", len(tm.trainerTile))
+	for tileNr, tile := range tm.activeTiles {
 		log.Infof("---------------------Tile %d---------------------", tileNr)
 		log.Infof("Tile bounds TopLeft:%+v, TopRight:%+v", tile.TopLeftCorner, tile.BotRightCorner)
 		log.Info("Number of active users: ", tile.nrTrainers)
 		log.Info("Number of generated pokemons: ", len(tile.pokemons))
-		log.Info("Number of gyms: ", len(rm.gymsFromTile[tileNr]))
+		log.Info("Number of gyms: ", len(tm.gymsFromTile[tileNr]))
 
 		//for i, pokemon := range tile.pokemons {
 		//	log.Infof("Wild pokemon %d location: %+v", i, pokemon.Location)
 		//}
 
-		for _, gym := range rm.gymsFromTile[tileNr] {
+		for _, gym := range tm.gymsFromTile[tileNr] {
 			log.Infof("Gym %s location: %+v", gym.Name, gym.Location)
 		}
 
 	}
 }
 
-func (rm *TileManager) AddGym(gym utils.Gym) error {
-	if isWithinBounds(gym.Location, rm.TopLeftCorner, rm.BotRightCorner) {
+func (tm *TileManager) AddGym(gym utils.Gym) error {
+	if isWithinBounds(gym.Location, tm.TopLeftCorner, tm.BotRightCorner) {
 		log.Infof("Adding gym %s", gym.Name)
-		tileNr, err := GetTileNrFromLocation(gym.Location, rm.numTilesPerAxis, rm.tileSideLength)
+		tileNr, err := GetTileNrFromLocation(gym.Location, tm.numTilesPerAxis, tm.tileSideLength)
 		if err != nil {
 			log.Error(err)
 			return err
 		}
-		rm.gymsFromTile[tileNr] = append(rm.gymsFromTile[tileNr], gym)
+		tm.gymsFromTile[tileNr] = append(tm.gymsFromTile[tileNr], gym)
 		return nil
 	} else {
 		return errors.New(fmt.Sprintf("Gym %s out of bounds", gym.Name))
 	}
+}
+
+func (tm *TileManager) SetBoundaries(topLeftCorner utils.Location, botRightCorner utils.Location) {
+	//TODO what to do to clients who become out of region
+	tm.BotRightCorner = botRightCorner
+	tm.TopLeftCorner = topLeftCorner
 }
