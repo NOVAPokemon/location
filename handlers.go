@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
@@ -106,6 +105,7 @@ func RefreshBoundariesPeriodic() {
 		if err != nil {
 			log.Error(err)
 		} else {
+			log.Info("Loaded config: %+v", *serverConfig)
 			tmLock.Lock()
 			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
 				serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
@@ -280,19 +280,22 @@ func HandleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 }
 
 func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
-	queryParams := r.URL.Query()
 
-	latStr := queryParams.Get(api.LatitudeQueryParam)
-	lonStr := queryParams.Get(api.LongitudeQueryParam)
+	log.Infof("Request: ", r.URL.String())
+	latStr := r.FormValue(api.LatitudeQueryParam)
+	lonStr := r.FormValue(api.LongitudeQueryParam)
 
+	log.Infof("Request to determine location for Lat: %s Lon: %s", latStr, lonStr)
 	lat, err := strconv.ParseFloat(latStr, 32)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusBadRequest)
+		return
 	}
 
 	lon, err := strconv.ParseFloat(lonStr, 32)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusBadRequest)
+		return
 	}
 
 	loc := utils.Location{
@@ -302,19 +305,24 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 	configs, err := locationdb.GetAllServerConfigs() // TODO Can be optimized, instead of fetching all the configs and looping
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
+		return
 	}
+
+	log.Info("Configs: ", configs)
 
 	for serverName, config := range configs {
 		if isWithinBounds(loc, config.TopLeftCorner, config.BotRightCorner) {
-			if toSend, err := json.Marshal(serverName); err != nil {
-				_, _ = w.Write(toSend)
-			} else {
-				log.Fatal(wrapGetServerForLocation(err))
+			log.Info("Server found")
+			toSend, err := json.Marshal(serverName)
+			if err != nil {
+				utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
+				return
 			}
+			_, _ = w.Write(toSend)
+			return
 		}
 	}
-	log.Warn(wrapGetServerForLocation(errors.New(fmt.Sprintf("No server found for location %+v", loc))))
-	w.WriteHeader(404)
+	utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(errors.New("No server found for supplied location")), http.StatusNotFound)
 }
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
