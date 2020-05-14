@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
+	"strings"
 )
 
 const UserLocationName = "USER_LOCATION"
@@ -19,7 +20,7 @@ const POST = "POST"
 const PUT = "PUT"
 
 var routes = utils.Routes{
-	api.DefaultRoute,
+	api.GenStatusRoute(strings.ToLower(serviceName)),
 	utils.Route{
 		Name:        UserLocationName,
 		Method:      GET,

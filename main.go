@@ -9,7 +9,6 @@ import (
 	"io/ioutil"
 	"math"
 	"math/rand"
-	"time"
 )
 
 const (
@@ -34,10 +33,7 @@ var (
 
 func main() {
 	utils.CheckLogFlag(serviceName)
-
 	pokemonSpecies = loadPokemonSpecies()
-	time.Sleep(2 * time.Second)
-
 	utils.StartServer(serviceName, host, port, routes)
 }
 

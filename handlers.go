@@ -59,15 +59,16 @@ func init() {
 			if err != nil {
 				log.Fatal(WrapInit(err))
 			}
+		} else {
+			log.Error(WrapInit(err))
+			log.Warnf("Starting with default config: %+v", config)
 		}
-		log.Error(WrapInit(err))
-		log.Warnf("Starting with default config: %+v", *config)
 		tmLock.Lock()
 		tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
 			config.TopLeftCorner, config.BotRightCorner)
 		tmLock.Unlock()
 	} else {
-		log.Warnf("Loaded config: %+v", *serverConfig)
+		log.Warnf("Loaded config: %+v", serverConfig)
 		tmLock.Lock()
 		tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
 			serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
@@ -89,30 +90,25 @@ func insertDefaultBoundariesInDB() error {
 	}
 
 	for i := 0; i < len(boundaryConfigs); i++ {
-		err := locationdb.UpdateServerConfig(boundaryConfigs[i].ServerName, boundaryConfigs[i])
-		log.Warn(WrapLoadServerBoundaries(err))
+		if err := locationdb.UpdateServerConfig(boundaryConfigs[i].ServerName, boundaryConfigs[i]); err != nil {
+			log.Warn(WrapLoadServerBoundaries(err))
+		}
 	}
 	return nil
 }
 
 func RefreshBoundariesPeriodic() {
 	for {
-		gyms, err := locationdb.GetGyms()
-		if err != nil {
-			log.Fatal(err)
-		}
 		serverConfig, err := locationdb.GetServerConfig(serverName)
 		if err != nil {
 			log.Error(err)
 		} else {
-			log.Info("Loaded config: %+v", *serverConfig)
-			tmLock.Lock()
-			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
-				serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
-			tmLock.Unlock()
+			log.Infof("Loaded config: %+v", *serverConfig)
+			tmLock.RLock()
+			tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
+			tmLock.RLock()
 		}
 		time.Sleep(time.Duration(config.UpdateConfigsInterval) * time.Second)
-
 	}
 }
 
@@ -280,8 +276,6 @@ func HandleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 }
 
 func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
-
-	log.Infof("Request: ", r.URL.String())
 	latStr := r.FormValue(api.LatitudeQueryParam)
 	lonStr := r.FormValue(api.LongitudeQueryParam)
 
