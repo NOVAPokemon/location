@@ -152,22 +152,11 @@ func (tm *TileManager) getPokemonsInTile(tileNr int) ([]utils.WildPokemon, error
 		return nil, errors.New("tile is nil")
 	}
 	pokemonsLock := &tile.pokemonLock
+
 	defer pokemonsLock.RUnlock()
 	pokemonsLock.RLock()
-	pokemonsInTile := tile.pokemons
-	/*
-
-
-		var pokemonsInVicinity []utils.WildPokemon
-
-		for _, pokemon := range pokemonsInTile {
-			distance := gps.CalcDistanceBetweenLocations(location, pokemon.Location)
-			if distance <= config.Vicinity {
-				pokemonsInVicinity = append(pokemonsInVicinity, pokemon)
-			}
-		}
-	*/
-	return pokemonsInTile, nil
+	pokemonsClone := tile.pokemons
+	return pokemonsClone, nil
 }
 
 func (tm *TileManager) getGymsInTile(tileNr int) []utils.Gym {
@@ -304,6 +293,7 @@ func (tm *TileManager) isBorderTile(topLeft utils.Location, botRight utils.Locat
 func (tm *TileManager) logTileManagerState() {
 	log.Infof("Number of active tiles: %d", len(tm.activeTiles))
 	log.Infof("Number of active users: %d", len(tm.trainerTile))
+	log.Info(tm.trainerTile)
 	for tileNr, tile := range tm.activeTiles {
 		log.Infof("---------------------Tile %d---------------------", tileNr)
 		log.Infof("Tile bounds TopLeft:%+v, TopRight:%+v", tile.TopLeftCorner, tile.BotRightCorner)

@@ -36,13 +36,6 @@ var routes = utils.Routes{
 	},
 
 	utils.Route{
-		Name:        CatchWildPokemonName,
-		Method:      GET,
-		Pattern:     api.CatchWildPokemonRoute,
-		HandlerFunc: HandleCatchWildPokemon,
-	},
-
-	utils.Route{
 		Name:        GetServerForLocationName,
 		Method:      GET,
 		Pattern:     api.GetServerForLocationRoute,
