@@ -73,8 +73,8 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 		return -1, err
 	}
 
-	lastTile, ok := tm.trainerTile[trainerId]
-	if ok {
+	lastTile, trainerRegistered := tm.trainerTile[trainerId]
+	if trainerRegistered {
 		if lastTile == tileNr {
 			//user remained in the same tile, no need to check if tile exists because tiles cant be deleted with
 			// a user there
@@ -87,6 +87,9 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 
 	if ok {
 		log.Infof("Trainer joined an already created zone (%d)", tileNr)
+		if !trainerRegistered {
+			tile.nrTrainers++
+		}
 	} else {
 		// no tile initialized for user
 		logrus.Infof("Created new tile (%d) for trainer: %s", tileNr, trainerId)
@@ -101,6 +104,7 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 		tm.activeTiles[tileNr] = tile
 		go tm.generateWildPokemonsForZonePeriodically(tileNr)
 	}
+
 	tm.trainerTile[trainerId] = tileNr
 	return tileNr, nil
 }
@@ -118,7 +122,6 @@ func (tm *TileManager) RemoveTrainerLocation(trainerId string) error {
 			delete(tm.activeTiles, tileNr)
 		}
 	}
-
 	delete(tm.trainerTile, trainerId)
 	return nil
 }

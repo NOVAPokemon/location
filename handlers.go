@@ -36,10 +36,10 @@ var (
 )
 
 func init() {
-	if aux, exists := os.LookupEnv(utils.LocationServerNameEnvVar); exists {
+	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
 		serverName = aux
 	} else {
-		log.Fatal("Location server could not load server name")
+		log.Fatal("Could not load server name")
 	}
 	log.Info("Server name : ", serverName)
 	if serverNrTmp, err := strconv.ParseInt(serverName[:len(serverName)-1], 10, 32); err != nil {
@@ -316,7 +316,7 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(errors.New("No server found for supplied location")), http.StatusNotFound)
+	utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(errors.New("no server found for supplied location")), http.StatusNotFound)
 }
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
@@ -324,38 +324,49 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 	_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 	conn.SetPongHandler(func(string) error {
+		//log.Warn("Received pong")
 		_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		return nil
 	})
 
-	var pingTicker = time.NewTicker(time.Duration(config.Ping) * time.Second)
 	inChan := make(chan *ws.Message)
 	finish := make(chan struct{})
 
 	go handleMessagesLoop(conn, inChan, finish)
+	defer func() {
+		if err := tm.RemoveTrainerLocation(user); err != nil {
+			log.Error(err)
+		}
+	}()
 
+	var pingTicker = time.NewTicker(time.Duration(config.Ping) * time.Second)
 	for {
 		select {
-		case msg := <-inChan:
+		case msg, ok := <-inChan:
+			if !ok {
+				continue
+			}
 			err := handleLocationMsg(conn, user, msg)
 			if err != nil {
-				log.Error(err)
+				log.Error(ws.WrapWritingMessageError(err))
+				return
 			}
-
 			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		case <-pingTicker.C:
 			if err := conn.WriteMessage(websocket.PingMessage, []byte{}); err != nil {
 				log.Error(ws.WrapWritingMessageError(err))
 				return
 			}
+			//log.Warn("Pinging")
 		case <-finish:
-			log.Info("Stopped tracking location")
+			log.Infof("Stopped tracking user %s location", user)
 			return
 		}
 	}
 }
 
 func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished chan struct{}) {
+	defer close(channel)
 	for {
 		msg, err := clients.Read(conn)
 		if err != nil {
@@ -371,7 +382,7 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 func handleLocationMsg(conn *websocket.Conn, user string, msg *ws.Message) error {
 	switch msg.MsgType {
 	case location.UpdateLocation:
-		desMsg, err := location.Deserialize(msg)
+		desMsg, err := location.DeserializeLocationMsg(msg)
 		if err != nil {
 			return wrapHandleLocationMsgs(err)
 		}
