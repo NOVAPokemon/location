@@ -10,6 +10,7 @@ const (
 	errorHandleLocationMsg         = "error handling location message"
 	errorLoadServerBoundaries      = "error loading server boundaries"
 	errorPokemonNotCatchableFormat = "pokemon %s is not available to catch"
+	errorCatchingPokemon           = "error catching pokemon"
 	errorInit                      = "error in INIT"
 )
 
@@ -28,7 +29,7 @@ func wrapUserLocationError(err error) error {
 }
 
 func wrapCatchWildPokemonError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, CatchWildPokemonName))
+	return errors.Wrap(err, errorCatchingPokemon)
 }
 
 func wrapSetServerConfigsError(err error) error {

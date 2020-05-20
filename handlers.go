@@ -263,7 +263,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			if !ok {
 				continue
 			}
-			err := handleLocationMsg(conn, user, msg)
+			err := handleLocationMsg(user, msg)
 			if err != nil {
 				log.Error(ws.WrapWritingMessageError(err))
 				return
@@ -287,7 +287,7 @@ func handleWriteLoop(conn *websocket.Conn, channel chan ws.GenericMsg, finished 
 	for {
 		select {
 		case msg := <-channel:
-			log.Info("Sending ", msg.MsgType, string(msg.Data))
+			//log.Info("Sending ", msg.MsgType, string(msg.Data))
 			if err := conn.WriteMessage(msg.MsgType, msg.Data); err != nil {
 				log.Error(ws.WrapWritingMessageError(err))
 			}
@@ -312,7 +312,7 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 	}
 }
 
-func handleLocationMsg(conn *websocket.Conn, user string, msg *ws.Message) error {
+func handleLocationMsg(user string, msg *ws.Message) error {
 	switch msg.MsgType {
 	case location.CatchPokemon:
 		desMsg, err := location.DeserializeLocationMsg(msg)
@@ -323,7 +323,7 @@ func handleLocationMsg(conn *websocket.Conn, user string, msg *ws.Message) error
 		pokeball := catchPokemonMsg.Pokeball
 		if !pokeball.IsPokeBall() {
 			msgBytes := []byte(ws.ErrorMessage{
-				Info:  wrapHandleLocationMsgs(errorInvalidItemCatch).Error(),
+				Info:  wrapCatchWildPokemonError(errorInvalidItemCatch).Error(),
 				Fatal: false,
 			}.SerializeToWSMessage().Serialize())
 			clientChannels[user] <- ws.GenericMsg{
@@ -336,7 +336,7 @@ func handleLocationMsg(conn *websocket.Conn, user string, msg *ws.Message) error
 		regionNr, ok := tm.GetTrainerTile(user)
 		if !ok {
 			msgBytes := []byte(ws.ErrorMessage{
-				Info:  wrapHandleLocationMsgs(errorLocationNotTracked).Error(),
+				Info:  wrapCatchWildPokemonError(errorLocationNotTracked).Error(),
 				Fatal: true,
 			}.SerializeToWSMessage().Serialize())
 			clientChannels[user] <- ws.GenericMsg{
@@ -349,7 +349,7 @@ func handleLocationMsg(conn *websocket.Conn, user string, msg *ws.Message) error
 		pokemon, err := tm.RemoveWildPokemonFromTile(regionNr, catchPokemonMsg.Pokemon)
 		if err != nil {
 			msgBytes := []byte(ws.ErrorMessage{
-				Info:  "PokemonNotFound",
+				Info:  wrapCatchWildPokemonError(err).Error(),
 				Fatal: false,
 			}.SerializeToWSMessage().Serialize())
 			clientChannels[user] <- ws.GenericMsg{
