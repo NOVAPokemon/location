@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -40,10 +41,14 @@ func init() {
 	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
 		serverName = aux
 	} else {
-		log.Fatal("Could not load server name")
+		log.Fatal(WrapInit(errors.New("could not load server name")))
 	}
 	log.Info("Server name : ", serverName)
-	if serverNrTmp, err := strconv.ParseInt(serverName[:len(serverName)-1], 10, 32); err != nil {
+
+	split := strings.Split(serverName, "-")
+	if serverNrTmp, err := strconv.ParseInt(split[len(split)-1], 10, 32); err != nil {
+		log.Fatal(WrapInit(err))
+	} else {
 		serverNr = serverNrTmp
 	}
 
@@ -51,31 +56,29 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	serverConfig, err := locationdb.GetServerConfig(serverName)
-	if err != nil {
-		if serverNr == 0 {
-			// if configs are missing, server 0 adds them
-			err := insertDefaultBoundariesInDB()
-			if err != nil {
-				log.Fatal(WrapInit(err))
+	for i := 0; i < 3; i++ {
+		serverConfig, err := locationdb.GetServerConfig(serverName)
+		if err != nil {
+			if serverNr == 0 {
+				// if configs are missing, server 0 adds them
+				err := insertDefaultBoundariesInDB()
+				if err != nil {
+					log.Error(WrapInit(err))
+				}
 			}
-		} else {
 			log.Error(WrapInit(err))
-			log.Warnf("Starting with default config: %+v", config)
+		} else {
+			log.Info("Loaded config: %+v", serverConfig)
+			tmLock.Lock()
+			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
+				serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
+			tmLock.Unlock()
+			go RefreshBoundariesPeriodic()
+			return
 		}
-		tmLock.Lock()
-		tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
-			config.TopLeftCorner, config.BotRightCorner)
-		tmLock.Unlock()
-	} else {
-		log.Warnf("Loaded config: %+v", serverConfig)
-		tmLock.Lock()
-		tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
-			serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
-		tmLock.Unlock()
+		time.Sleep(time.Duration(5*i) * time.Second)
 	}
-	go RefreshBoundariesPeriodic()
+	log.Panic(WrapInit(errors.New("could not load configs from DB")))
 }
 
 func insertDefaultBoundariesInDB() error {
@@ -104,7 +107,7 @@ func RefreshBoundariesPeriodic() {
 		if err != nil {
 			log.Error(err)
 		} else {
-			log.Infof("Loaded config: %+v", *serverConfig)
+			log.Infof("Loaded boundaries: %+v", *serverConfig)
 			tmLock.RLock()
 			tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
 			tmLock.RLock()
@@ -213,12 +216,8 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 		utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
 		return
 	}
-
-	log.Info("Configs: ", configs)
-
 	for serverName, config := range configs {
 		if isWithinBounds(loc, config.TopLeftCorner, config.BotRightCorner) {
-			log.Info("Server found")
 			toSend, err := json.Marshal(serverName)
 			if err != nil {
 				utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
@@ -294,7 +293,6 @@ func handleWriteLoop(conn *websocket.Conn, channel chan ws.GenericMsg, finished 
 		case <-finished:
 			return
 		}
-
 	}
 }
 

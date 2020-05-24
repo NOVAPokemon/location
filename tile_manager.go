@@ -275,11 +275,11 @@ func (tm *TileManager) LoadGyms(gyms []utils.Gym) {
 }
 
 func isWithinBounds(location utils.Location, topLeft utils.Location, botRight utils.Location) bool {
-	if location.Longitude > botRight.Longitude || location.Longitude < topLeft.Longitude {
+	if location.Longitude >= botRight.Longitude || location.Longitude <= topLeft.Longitude {
 		return false
 	}
 
-	if location.Latitude < botRight.Latitude || location.Latitude > topLeft.Latitude {
+	if location.Latitude <= botRight.Latitude || location.Latitude >= topLeft.Latitude {
 		return false
 	}
 	return true
