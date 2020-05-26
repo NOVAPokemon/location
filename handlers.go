@@ -68,7 +68,7 @@ func init() {
 			}
 			log.Error(WrapInit(err))
 		} else {
-			log.Info("Loaded config: %+v", serverConfig)
+			log.Infof("Loaded config: %+v", serverConfig)
 			tmLock.Lock()
 			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
 				serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
