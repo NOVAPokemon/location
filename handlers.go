@@ -52,11 +52,7 @@ func init() {
 		serverNr = serverNrTmp
 	}
 
-	gyms, err := locationdb.GetGyms()
-	if err != nil {
-		log.Fatal(err)
-	}
-	for i := 0; i < 15; i++ {
+	for i := 0; i < 5; i++ {
 		serverConfig, err := locationdb.GetServerConfig(serverName)
 		if err != nil {
 			if serverNr == 0 {
@@ -68,6 +64,12 @@ func init() {
 			}
 			log.Error(WrapInit(err))
 		} else {
+			gyms, err := locationdb.GetGyms()
+			if err != nil {
+				log.Error(err)
+				continue
+			}
+
 			log.Infof("Loaded config: %+v", serverConfig)
 			tmLock.Lock()
 			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
