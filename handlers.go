@@ -56,7 +56,7 @@ func init() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 15; i++ {
 		serverConfig, err := locationdb.GetServerConfig(serverName)
 		if err != nil {
 			if serverNr == 0 {
