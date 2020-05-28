@@ -119,7 +119,7 @@ func RefreshBoundariesPeriodic() {
 }
 
 func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
-	var gym utils.Gym
+	var gym utils.GymWithServer
 	err := json.NewDecoder(r.Body).Decode(&gym)
 	if err != nil {
 		log.Error(wrapAddGymError(err))

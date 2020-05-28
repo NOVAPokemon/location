@@ -18,7 +18,7 @@ type TileManager struct {
 	NumTilesInWorld          int
 	TopLeftCorner            utils.Location
 	BotRightCorner           utils.Location
-	gymsFromTile             map[int][]utils.Gym
+	gymsFromTile             map[int][]utils.GymWithServer
 	activeTiles              map[int]*Tile
 	trainerTile              map[string]int
 	numTilesPerAxis          int
@@ -40,7 +40,7 @@ const LatitudeMax = 85.05115
 
 var gymsLock sync.RWMutex
 
-func NewTileManager(gyms []utils.Gym, numTiles int, maxPokemonsPerTile int, pokemonsPerGeneration int, topLeft utils.Location, botRight utils.Location) *TileManager {
+func NewTileManager(gyms []utils.GymWithServer, numTiles int, maxPokemonsPerTile int, pokemonsPerGeneration int, topLeft utils.Location, botRight utils.Location) *TileManager {
 
 	numTilesPerAxis := int(math.Sqrt(float64(numTiles)))
 	tileSide := 360.0 / numTilesPerAxis
@@ -159,13 +159,13 @@ func (tm *TileManager) getPokemonsInTile(tileNr int) ([]utils.WildPokemon, error
 	return pokemonsClone, nil
 }
 
-func (tm *TileManager) getGymsInTile(tileNr int) []utils.Gym {
+func (tm *TileManager) getGymsInTile(tileNr int) []utils.GymWithServer {
 	gymsLock.RLock()
 	gymsInTile, ok := tm.gymsFromTile[tileNr]
 	gymsLock.RUnlock()
 
 	if !ok {
-		return []utils.Gym{}
+		return []utils.GymWithServer{}
 	}
 	/*
 		var gymsInVicinity []utils.Gym
@@ -175,7 +175,6 @@ func (tm *TileManager) getGymsInTile(tileNr int) []utils.Gym {
 					gymsInVicinity = append(gymsInVicinity, gym)
 				}
 			}*/
-
 	return gymsInTile
 }
 
@@ -251,19 +250,19 @@ func GetTileNrFromLocation(location utils.Location, numTilesPerAxis int, tileSid
 	return tileNr, nil
 }
 
-func (tm *TileManager) LoadGyms(gyms []utils.Gym) {
+func (tm *TileManager) LoadGyms(gyms []utils.GymWithServer) {
 
-	tm.gymsFromTile = make(map[int][]utils.Gym, len(gyms))
+	tm.gymsFromTile = make(map[int][]utils.GymWithServer, len(gyms))
 
-	for _, gym := range gyms {
-
+	for _, gymWithSrv := range gyms {
+		gym := gymWithSrv.Gym
 		if isWithinBounds(gym.Location, tm.TopLeftCorner, tm.BotRightCorner) {
 			tileNr, err := GetTileNrFromLocation(gym.Location, tm.numTilesPerAxis, tm.tileSideLength)
 			if err != nil {
 				log.Error(err)
 				continue
 			}
-			tm.gymsFromTile[tileNr] = append(tm.gymsFromTile[tileNr], gym)
+			tm.gymsFromTile[tileNr] = append(tm.gymsFromTile[tileNr], gymWithSrv)
 		} else {
 			log.Infof("Gym %s out of bounds", gym.Name)
 		}
@@ -305,14 +304,15 @@ func (tm *TileManager) logTileManagerState() {
 		//	log.Infof("Wild pokemon %d location: %+v", i, pokemon.Location)
 		//}
 
-		for _, gym := range tm.gymsFromTile[tileNr] {
-			log.Infof("Gym %s location: %+v", gym.Name, gym.Location)
+		for _, gymWithSrv := range tm.gymsFromTile[tileNr] {
+			log.Infof("Gym %s location: %+v", gymWithSrv.Gym.Name, gymWithSrv.Gym.Location)
 		}
 
 	}
 }
 
-func (tm *TileManager) AddGym(gym utils.Gym) error {
+func (tm *TileManager) AddGym(gymWithSrv utils.GymWithServer) error {
+	gym := gymWithSrv.Gym
 	if isWithinBounds(gym.Location, tm.TopLeftCorner, tm.BotRightCorner) {
 		log.Infof("Adding gym %s", gym.Name)
 		tileNr, err := GetTileNrFromLocation(gym.Location, tm.numTilesPerAxis, tm.tileSideLength)
@@ -320,7 +320,7 @@ func (tm *TileManager) AddGym(gym utils.Gym) error {
 			log.Error(err)
 			return err
 		}
-		tm.gymsFromTile[tileNr] = append(tm.gymsFromTile[tileNr], gym)
+		tm.gymsFromTile[tileNr] = append(tm.gymsFromTile[tileNr], gymWithSrv)
 		return nil
 	} else {
 		return errors.New(fmt.Sprintf("Gym %s out of bounds", gym.Name))
