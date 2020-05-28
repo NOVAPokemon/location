@@ -53,6 +53,8 @@ func init() {
 	}
 
 	for i := 0; i < 5; i++ {
+		time.Sleep(time.Duration(5*i) * time.Second)
+
 		serverConfig, err := locationdb.GetServerConfig(serverName)
 		if err != nil {
 			if serverNr == 0 {
@@ -78,7 +80,6 @@ func init() {
 			go RefreshBoundariesPeriodic()
 			return
 		}
-		time.Sleep(time.Duration(5*i) * time.Second)
 	}
 	log.Panic(WrapInit(errors.New("could not load configs from DB")))
 }
