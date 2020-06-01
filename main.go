@@ -7,10 +7,12 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"net/http"
 	"time"
 )
 
@@ -37,6 +39,7 @@ var (
 func main() {
 	utils.CheckLogFlag(serviceName)
 	pokemonSpecies = loadPokemonSpecies()
+	http.Handle("/metrics", promhttp.Handler())
 	recordMetrics()
 	utils.StartServer(serviceName, host, port, routes)
 }
@@ -45,6 +48,7 @@ func main() {
 func recordMetrics() {
 	go func() {
 		for {
+			log.Info("updating metrics")
 			connectedClients.Set(float64(len(clientChannels)))
 			time.Sleep(2 * time.Second)
 		}
