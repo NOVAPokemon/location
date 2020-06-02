@@ -1,6 +1,6 @@
 [
   {
-    "ServerName": "location-app-0",
+    "ServerName": "location-0",
     "TopLeftCorner": {
       "Latitude": 85.05115,
       "Longitude": -180.0
@@ -11,7 +11,7 @@
     }
   },
   {
-    "ServerName": "location-app-1",
+    "ServerName": "location-1",
     "TopLeftCorner": {
       "Latitude": 85.05115,
       "Longitude": 0.0
@@ -22,7 +22,7 @@
     }
   },
   {
-    "ServerName": "location-app-2",
+    "ServerName": "location-2",
     "TopLeftCorner": {
       "Latitude": 0.0,
       "Longitude": -180.0
@@ -33,7 +33,7 @@
     }
   },
   {
-    "ServerName": "location-app-3",
+    "ServerName": "location-3",
     "TopLeftCorner": {
       "Latitude": 0.0,
       "Longitude": 0.0

@@ -46,7 +46,9 @@ func main() {
 func recordMetrics() {
 	go func() {
 		for {
-			log.Info("updating metrics")
+			log.Info("updating metrics:")
+			log.Infof("%+v", clientChannels)
+			log.Infof("%s:%f", "location_connected_clients", float64(len(clientChannels)))
 			connectedClients.Set(float64(len(clientChannels)))
 			time.Sleep(2 * time.Second)
 		}

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -29,16 +30,24 @@ const (
 )
 
 var (
-	tm                *TileManager
-	serverName        string
-	serverNr          int64
-	timeoutInDuration = time.Duration(config.Timeout) * time.Second
-	tmLock            = sync.RWMutex{}
-	httpClient        = &http.Client{}
-	clientChannels    = make(map[string]chan ws.GenericMsg, 10)
+	tm                  *TileManager
+	serverName          string
+	serverNr            int64
+	timeoutInDuration   = time.Duration(config.Timeout) * time.Second
+	tmLock              = sync.RWMutex{}
+	httpClient          = &http.Client{}
+	clientChannels      = make(map[string]chan ws.GenericMsg, 10)
+	serviceNameHeadless string
 )
 
 func init() {
+
+	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
+		serviceNameHeadless = aux
+	} else {
+		log.Fatal("Could not load headless service name")
+	}
+
 	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
 		serverName = aux
 	} else {
@@ -222,7 +231,8 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 	}
 	for serverName, config := range configs {
 		if isWithinBounds(loc, config.TopLeftCorner, config.BotRightCorner) {
-			toSend, err := json.Marshal(serverName)
+			serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+			toSend, err := json.Marshal(serverAddr)
 			if err != nil {
 				utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
 				return
