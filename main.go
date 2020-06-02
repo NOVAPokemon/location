@@ -2,16 +2,17 @@ package main
 
 import (
 	"encoding/json"
+	"io/ioutil"
+	"math"
+	"math/rand"
+	"time"
+
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/gorilla/websocket"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
-	"io/ioutil"
-	"math"
-	"math/rand"
-	"time"
 )
 
 const (

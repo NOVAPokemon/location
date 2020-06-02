@@ -3,14 +3,15 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
+	"sync"
+	"time"
+
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/golang/geo/s2"
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
-	"math"
-	"sync"
-	"time"
 )
 
 type TileManager struct {

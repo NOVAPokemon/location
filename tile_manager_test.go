@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/NOVAPokemon/utils"
 	"os"
 	"testing"
+
+	"github.com/NOVAPokemon/utils"
 )
 
 func TestMain(m *testing.M) {
