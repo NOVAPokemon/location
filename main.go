@@ -5,10 +5,13 @@ import (
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/gorilla/websocket"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"math"
 	"math/rand"
+	"time"
 )
 
 const (
@@ -34,8 +37,27 @@ var (
 func main() {
 	utils.CheckLogFlag(serviceName)
 	pokemonSpecies = loadPokemonSpecies()
+	recordMetrics()
 	utils.StartServer(serviceName, host, port, routes)
 }
+
+// metrics for prometheus
+func recordMetrics() {
+	go func() {
+		for {
+			log.Info("updating metrics")
+			connectedClients.Set(float64(len(clientChannels)))
+			time.Sleep(2 * time.Second)
+		}
+	}()
+}
+
+var (
+	connectedClients = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "location_connected_clients",
+		Help: "The total number of connected clients",
+	})
+)
 
 // Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
 func loadPokemonSpecies() []string {
