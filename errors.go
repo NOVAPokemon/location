@@ -7,10 +7,10 @@ import (
 )
 
 const (
-	errorHandleLocationMsg         = "error handling location message"
-	errorLoadServerBoundaries      = "error loading server boundaries"
-	errorCatchingPokemon           = "error catching pokemon"
-	errorInit                      = "error in INIT"
+	errorHandleLocationMsg    = "error handling location message"
+	errorLoadServerBoundaries = "error loading server boundaries"
+	errorCatchingPokemon      = "error catching pokemon"
+	errorInit                 = "error in INIT"
 )
 
 var (
