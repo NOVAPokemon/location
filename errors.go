@@ -9,7 +9,6 @@ import (
 const (
 	errorHandleLocationMsg         = "error handling location message"
 	errorLoadServerBoundaries      = "error loading server boundaries"
-	errorPokemonNotCatchableFormat = "pokemon %s is not available to catch"
 	errorCatchingPokemon           = "error catching pokemon"
 	errorInit                      = "error in INIT"
 )
@@ -55,9 +54,4 @@ func WrapInit(err error) error {
 
 func WrapLoadServerBoundaries(err error) error {
 	return errors.Wrap(err, errorLoadServerBoundaries)
-}
-
-// Error builders
-func newPokemonNotAvailable(pokemonId string) error {
-	return errors.New(fmt.Sprintf(errorPokemonNotCatchableFormat, pokemonId))
 }

@@ -238,7 +238,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 	_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 	conn.SetPongHandler(func(string) error {
-		//log.Warn("Received pong")
+		// log.Warn("Received pong")
 		_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		return nil
 	})
@@ -276,7 +276,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 				MsgType: websocket.PingMessage,
 				Data:    []byte{},
 			}
-			//log.Warn("Pinging")
+			// log.Warn("Pinging")
 		case <-finish:
 			log.Infof("Stopped tracking user %s location", user)
 			return
@@ -289,7 +289,7 @@ func handleWriteLoop(conn *websocket.Conn, channel chan ws.GenericMsg, finished 
 	for {
 		select {
 		case msg := <-channel:
-			//log.Info("Sending ", msg.MsgType, string(msg.Data))
+			// log.Info("Sending ", msg.MsgType, string(msg.Data))
 			if err := conn.WriteMessage(msg.MsgType, msg.Data); err != nil {
 				log.Error(ws.WrapWritingMessageError(err))
 			}

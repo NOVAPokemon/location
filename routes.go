@@ -8,7 +8,6 @@ import (
 
 const UserLocationName = "USER_LOCATION"
 const AddGymLocationName = "GYM_LOCATION"
-const CatchWildPokemonName = "CATCH_WILD_POKEMON"
 
 const GetGlobalRegionConfigName = "GET_GLOBAL_SERVER_CONFIG"
 const GetServerForLocationName = "GET_SERVER_FOR_LOCATION"

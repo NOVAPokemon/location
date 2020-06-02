@@ -76,7 +76,7 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 	lastTile, trainerRegistered := tm.trainerTile[trainerId]
 	if trainerRegistered {
 		if lastTile == tileNr {
-			//user remained in the same tile, no need to check if tile exists because tiles cant be deleted with
+			// user remained in the same tile, no need to check if tile exists because tiles cant be deleted with
 			// a user there
 			logrus.Infof("Trainer %s is still in the same tile (%d)", trainerId, tileNr)
 			return tileNr, nil
@@ -300,9 +300,9 @@ func (tm *TileManager) logTileManagerState() {
 		log.Info("Number of generated pokemons: ", len(tile.pokemons))
 		log.Info("Number of gyms: ", len(tm.gymsFromTile[tileNr]))
 
-		//for i, pokemon := range tile.pokemons {
+		// for i, pokemon := range tile.pokemons {
 		//	log.Infof("Wild pokemon %d location: %+v", i, pokemon.Location)
-		//}
+		// }
 
 		for _, gymWithSrv := range tm.gymsFromTile[tileNr] {
 			log.Infof("Gym %s location: %+v", gymWithSrv.Gym.Name, gymWithSrv.Gym.Location)
@@ -328,7 +328,7 @@ func (tm *TileManager) AddGym(gymWithSrv utils.GymWithServer) error {
 }
 
 func (tm *TileManager) SetBoundaries(topLeftCorner utils.Location, botRightCorner utils.Location) {
-	//TODO what to do to clients who become out of region
+	// TODO what to do to clients who become out of region
 	tm.BotRightCorner = botRightCorner
 	tm.TopLeftCorner = topLeftCorner
 }
