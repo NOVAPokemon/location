@@ -293,7 +293,7 @@ func (tm *TileManager) isBorderTile(topLeft utils.Location, botRight utils.Locat
 func (tm *TileManager) logTileManagerState() {
 	log.Infof("Number of active tiles: %d", len(tm.activeTiles))
 	log.Infof("Number of active users: %d", len(tm.trainerTile))
-	log.Info(tm.trainerTile)
+	// log.Info(tm.trainerTile)
 	for tileNr, tile := range tm.activeTiles {
 		log.Infof("---------------------Tile %d---------------------", tileNr)
 		log.Infof("Tile bounds TopLeft:%+v, TopRight:%+v", tile.TopLeftCorner, tile.BotRightCorner)
