@@ -25,6 +25,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type (
+	valueType = chan ws.GenericMsg
+)
+
 const (
 	maxCatchingProbability = 100
 )
@@ -36,7 +40,7 @@ var (
 	timeoutInDuration   = time.Duration(config.Timeout) * time.Second
 	tmLock              = sync.RWMutex{}
 	httpClient          = &http.Client{}
-	clientChannels      = make(map[string]chan ws.GenericMsg, 10)
+	clientChannels      = sync.Map{}
 	serviceNameHeadless string
 )
 
@@ -258,8 +262,8 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	outChan := make(chan ws.GenericMsg)
 	finish := make(chan struct{})
 
-	clientChannels[user] = outChan
-	defer delete(clientChannels, user)
+	clientChannels.Store(user, outChan)
+	defer clientChannels.Delete(user)
 
 	go handleMessagesLoop(conn, inChan, finish)
 	go handleWriteLoop(conn, outChan, finish)
@@ -338,10 +342,17 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 				Info:  wrapCatchWildPokemonError(errorInvalidItemCatch).Error(),
 				Fatal: false,
 			}.SerializeToWSMessage().Serialize())
-			clientChannels[user] <- ws.GenericMsg{
+			channelGeneric, ok := clientChannels.Load(user)
+			if !ok {
+				return nil
+			}
+
+			channel := channelGeneric.(valueType)
+			channel <- ws.GenericMsg{
 				MsgType: websocket.TextMessage,
 				Data:    msgBytes,
 			}
+
 			return nil
 		}
 
@@ -351,7 +362,14 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 				Info:  wrapCatchWildPokemonError(errorLocationNotTracked).Error(),
 				Fatal: true,
 			}.SerializeToWSMessage().Serialize())
-			clientChannels[user] <- ws.GenericMsg{
+
+			channelGeneric, ok := clientChannels.Load(user)
+			if !ok {
+				return nil
+			}
+
+			channel := channelGeneric.(valueType)
+			channel <- ws.GenericMsg{
 				MsgType: websocket.TextMessage,
 				Data:    msgBytes,
 			}
@@ -364,7 +382,14 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 				Info:  wrapCatchWildPokemonError(err).Error(),
 				Fatal: false,
 			}.SerializeToWSMessage().Serialize())
-			clientChannels[user] <- ws.GenericMsg{
+
+			channelGeneric, ok := clientChannels.Load(user)
+			if !ok {
+				return nil
+			}
+
+			channel := channelGeneric.(valueType)
+			channel <- ws.GenericMsg{
 				MsgType: websocket.TextMessage,
 				Data:    msgBytes,
 			}
@@ -389,7 +414,14 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 					Info:  wrapHandleLocationMsgs(err).Error(),
 					Fatal: true,
 				}.SerializeToWSMessage().Serialize())
-				clientChannels[user] <- ws.GenericMsg{
+
+				channelGeneric, ok := clientChannels.Load(user)
+				if !ok {
+					return nil
+				}
+
+				channel := channelGeneric.(valueType)
+				channel <- ws.GenericMsg{
 					MsgType: websocket.TextMessage,
 					Data:    msgBytes,
 				}
@@ -405,7 +437,14 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 			Caught:        caught,
 			PokemonTokens: pokemonTokens,
 		}.SerializeToWSMessage().Serialize())
-		clientChannels[user] <- ws.GenericMsg{
+
+		channelGeneric, ok := clientChannels.Load(user)
+		if !ok {
+			return nil
+		}
+
+		channel := channelGeneric.(valueType)
+		channel <- ws.GenericMsg{
 			MsgType: websocket.TextMessage,
 			Data:    msgBytes,
 		}
@@ -433,12 +472,18 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 
 		tmLock.RUnlock()
 
-		clientChannels[user] <- ws.GenericMsg{
+		channelGeneric, ok := clientChannels.Load(user)
+		if !ok {
+			return nil
+		}
+
+		channel := channelGeneric.(valueType)
+		channel <- ws.GenericMsg{
 			MsgType: websocket.TextMessage,
 			Data:    []byte(location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()),
 		}
 
-		clientChannels[user] <- ws.GenericMsg{
+		channel <- ws.GenericMsg{
 			MsgType: websocket.TextMessage,
 			Data: []byte(location.PokemonMessage{
 				Pokemon: pokemonInVicinity,

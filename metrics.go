@@ -18,8 +18,14 @@ var (
 func recordMetrics() {
 	go func() {
 		for {
-			connectedClients.Set(float64(len(clientChannels)))
-			time.Sleep(2 * time.Second)
+			counter := 0
+			clientChannels.Range(func (_, _ interface{}) bool {
+				counter++
+				return true
+			})
+
+			connectedClients.Set(float64(counter))
+			time.Sleep(8 * time.Second)
 		}
 	}()
 }
