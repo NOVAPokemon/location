@@ -2,13 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"io/ioutil"
+	"math"
+	"math/rand"
+
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	"io/ioutil"
-	"math"
-	"math/rand"
 )
 
 const (
