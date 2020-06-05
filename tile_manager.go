@@ -14,6 +14,10 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+type (
+	trainerTileValueType = int
+)
+
 type TileManager struct {
 	pokemonSpecies           []string
 	NumTilesInWorld          int
@@ -21,7 +25,7 @@ type TileManager struct {
 	BotRightCorner           utils.Location
 	gymsFromTile             map[int][]utils.GymWithServer
 	activeTiles              map[int]*Tile
-	trainerTile              map[string]int
+	trainerTile              sync.Map
 	numTilesPerAxis          int
 	tileSideLength           int
 	maxPokemonsPerTile       int
@@ -50,7 +54,7 @@ func NewTileManager(gyms []utils.GymWithServer, numTiles int, maxPokemonsPerTile
 		TopLeftCorner:            topLeft,
 		BotRightCorner:           botRight,
 		activeTiles:              make(map[int]*Tile),
-		trainerTile:              make(map[string]int),
+		trainerTile:              sync.Map{},
 		numTilesPerAxis:          numTilesPerAxis,
 		tileSideLength:           tileSide,
 		maxPokemonsPerTile:       maxPokemonsPerTile,
@@ -74,8 +78,9 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 		return -1, err
 	}
 
-	lastTile, trainerRegistered := tm.trainerTile[trainerId]
+	lastTileInterface, trainerRegistered := tm.trainerTile.Load(trainerId)
 	if trainerRegistered {
+		lastTile := lastTileInterface.(trainerTileValueType)
 		if lastTile == tileNr {
 			// user remained in the same tile, no need to check if tile exists because tiles cant be deleted with
 			// a user there
@@ -106,16 +111,17 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 		go tm.generateWildPokemonsForZonePeriodically(tileNr)
 	}
 
-	tm.trainerTile[trainerId] = tileNr
+	tm.trainerTile.Store(trainerId, tileNr)
 	return tileNr, nil
 }
 
 func (tm *TileManager) RemoveTrainerLocation(trainerId string) error {
-	tileNr, ok := tm.trainerTile[trainerId]
+	tileNrInterface, ok := tm.trainerTile.Load(trainerId)
 	if !ok {
 		return errors.New("user was not being tracked")
 	}
 
+	tileNr := tileNrInterface.(trainerTileValueType)
 	if tile, ok := tm.activeTiles[tileNr]; ok {
 		tile.nrTrainers--
 		if tile.nrTrainers == 0 {
@@ -123,7 +129,7 @@ func (tm *TileManager) RemoveTrainerLocation(trainerId string) error {
 			delete(tm.activeTiles, tileNr)
 		}
 	}
-	delete(tm.trainerTile, trainerId)
+	tm.trainerTile.Delete(trainerId)
 	return nil
 }
 
@@ -142,9 +148,9 @@ func (tm *TileManager) GetTileBoundsFromTileNr(tileNr int) (topLeft utils.Locati
 	return topLeft, botRight
 }
 
-func (tm *TileManager) GetTrainerTile(trainerId string) (int, bool) {
-	tileNr, ok := tm.trainerTile[trainerId]
-	return tileNr, ok
+func (tm *TileManager) GetTrainerTile(trainerId string) (interface{}, bool) {
+	tileNrInterface, ok := tm.trainerTile.Load(trainerId)
+	return tileNrInterface, ok
 }
 
 func (tm *TileManager) getPokemonsInTile(tileNr int) ([]utils.WildPokemon, error) {
@@ -292,7 +298,14 @@ func (tm *TileManager) isBorderTile(topLeft utils.Location, botRight utils.Locat
 
 func (tm *TileManager) logTileManagerState() {
 	log.Infof("Number of active tiles: %d", len(tm.activeTiles))
-	log.Infof("Number of active users: %d", len(tm.trainerTile))
+
+	numUsers := 0
+	tm.trainerTile.Range(func(_, _ interface{}) bool {
+		numUsers++
+		return true
+	})
+
+	log.Infof("Number of active users: %d", numUsers)
 	// log.Info(tm.trainerTile)
 	for tileNr, tile := range tm.activeTiles {
 		log.Infof("---------------------Tile %d---------------------", tileNr)

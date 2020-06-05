@@ -356,7 +356,7 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 			return nil
 		}
 
-		regionNr, ok := tm.GetTrainerTile(user)
+		regionNrInterface, ok := tm.GetTrainerTile(user)
 		if !ok {
 			msgBytes := []byte(ws.ErrorMessage{
 				Info:  wrapCatchWildPokemonError(errorLocationNotTracked).Error(),
@@ -375,6 +375,8 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 			}
 			return err
 		}
+
+		regionNr := regionNrInterface.(trainerTileValueType)
 
 		pokemon, err := tm.RemoveWildPokemonFromTile(regionNr, catchPokemonMsg.Pokemon)
 		if err != nil {
