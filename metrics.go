@@ -19,7 +19,7 @@ func recordMetrics() {
 	go func() {
 		for {
 			counter := 0
-			clientChannels.Range(func (_, _ interface{}) bool {
+			clientChannels.Range(func(_, _ interface{}) bool {
 				counter++
 				return true
 			})
