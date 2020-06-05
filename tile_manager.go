@@ -15,7 +15,9 @@ import (
 )
 
 type (
-	trainerTileValueType = int
+	gymsFromTileValueType = []utils.GymWithServer
+	activeTileValueType   = *Tile
+	trainerTileValueType  = int
 )
 
 type TileManager struct {
@@ -23,8 +25,8 @@ type TileManager struct {
 	NumTilesInWorld          int
 	TopLeftCorner            utils.Location
 	BotRightCorner           utils.Location
-	gymsFromTile             map[int][]utils.GymWithServer
-	activeTiles              map[int]*Tile
+	gymsFromTile             sync.Map
+	activeTiles              sync.Map
 	trainerTile              sync.Map
 	numTilesPerAxis          int
 	tileSideLength           int
@@ -53,7 +55,7 @@ func NewTileManager(gyms []utils.GymWithServer, numTiles int, maxPokemonsPerTile
 		NumTilesInWorld:          numTiles,
 		TopLeftCorner:            topLeft,
 		BotRightCorner:           botRight,
-		activeTiles:              make(map[int]*Tile),
+		activeTiles:              sync.Map{},
 		trainerTile:              sync.Map{},
 		numTilesPerAxis:          numTilesPerAxis,
 		tileSideLength:           tileSide,
@@ -89,9 +91,9 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 		}
 	}
 
-	tile, ok := tm.activeTiles[tileNr]
-
+	tileInterface, ok := tm.activeTiles.Load(tileNr)
 	if ok {
+		tile := tileInterface.(activeTileValueType)
 		log.Infof("Trainer joined an already created zone (%d)", tileNr)
 		if !trainerRegistered {
 			tile.nrTrainers++
@@ -100,14 +102,14 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 		// no tile initialized for user
 		logrus.Infof("Created new tile (%d) for trainer: %s", tileNr, trainerId)
 		topLeft, botRight := tm.GetTileBoundsFromTileNr(tileNr)
-		tile = &Tile{
+		tile := &Tile{
 			nrTrainers:     1,
 			pokemons:       make([]utils.WildPokemon, 0, tm.maxPokemonsPerTile),
 			borderTile:     tm.isBorderTile(topLeft, botRight),
 			BotRightCorner: botRight,
 			TopLeftCorner:  topLeft,
 		}
-		tm.activeTiles[tileNr] = tile
+		tm.activeTiles.Store(tileNr, tile)
 		go tm.generateWildPokemonsForZonePeriodically(tileNr)
 	}
 
@@ -122,11 +124,12 @@ func (tm *TileManager) RemoveTrainerLocation(trainerId string) error {
 	}
 
 	tileNr := tileNrInterface.(trainerTileValueType)
-	if tile, ok := tm.activeTiles[tileNr]; ok {
+	if tileInterface, ok := tm.activeTiles.Load(tileNr); ok {
+		tile := tileInterface.(activeTileValueType)
 		tile.nrTrainers--
 		if tile.nrTrainers == 0 {
 			log.Warnf("Disabling tile %d", tileNr)
-			delete(tm.activeTiles, tileNr)
+			tm.activeTiles.Delete(tileNr)
 		}
 	}
 	tm.trainerTile.Delete(trainerId)
@@ -154,10 +157,12 @@ func (tm *TileManager) GetTrainerTile(trainerId string) (interface{}, bool) {
 }
 
 func (tm *TileManager) getPokemonsInTile(tileNr int) ([]utils.WildPokemon, error) {
-	tile, ok := tm.activeTiles[tileNr]
+	tileInterface, ok := tm.activeTiles.Load(tileNr)
 	if !ok {
 		return nil, errors.New("tile is nil")
 	}
+
+	tile := tileInterface.(activeTileValueType)
 	pokemonsLock := &tile.pokemonLock
 
 	defer pokemonsLock.RUnlock()
@@ -168,7 +173,7 @@ func (tm *TileManager) getPokemonsInTile(tileNr int) ([]utils.WildPokemon, error
 
 func (tm *TileManager) getGymsInTile(tileNr int) []utils.GymWithServer {
 	gymsLock.RLock()
-	gymsInTile, ok := tm.gymsFromTile[tileNr]
+	gymsInTileInterface, ok := tm.gymsFromTile.Load(tileNr)
 	gymsLock.RUnlock()
 
 	if !ok {
@@ -182,11 +187,18 @@ func (tm *TileManager) getGymsInTile(tileNr int) []utils.GymWithServer {
 					gymsInVicinity = append(gymsInVicinity, gym)
 				}
 			}*/
-	return gymsInTile
+	return gymsInTileInterface.(gymsFromTileValueType)
 }
 
 func (tm *TileManager) generateWildPokemonsForZonePeriodically(zoneNr int) {
-	for tile, ok := tm.activeTiles[zoneNr]; ok && tile.nrTrainers != 0; {
+	tileInterface, ok := tm.activeTiles.Load(zoneNr)
+	if !ok {
+		log.Warnf("Stopped generating pokemons for zone %d due to missing zone", zoneNr)
+		return
+	}
+
+	tile := tileInterface.(activeTileValueType)
+	for ; ok && tile.nrTrainers != 0; {
 		log.Info("Refreshing wild pokemons...")
 		pokemonLock := &tile.pokemonLock
 		pokemonLock.Lock()
@@ -204,17 +216,20 @@ func (tm *TileManager) generateWildPokemonsForZonePeriodically(zoneNr int) {
 }
 
 func (tm *TileManager) cleanWildPokemons(tileNr int) {
-	tile, ok := tm.activeTiles[tileNr]
+	tileInterface, ok := tm.activeTiles.Load(tileNr)
 	if ok {
+		tile := tileInterface.(activeTileValueType)
 		tile.pokemons = make([]utils.WildPokemon, 0)
 	}
 }
 
 func (tm *TileManager) RemoveWildPokemonFromTile(tileNr int, pokemonId string) (*pokemons.Pokemon, error) {
-	tile, ok := tm.activeTiles[tileNr]
+	tileInterface, ok := tm.activeTiles.Load(tileNr)
 	if !ok {
 		return nil, errors.New("tile is nil")
 	}
+
+	tile := tileInterface.(activeTileValueType)
 	pokemonLock := &tile.pokemonLock
 	pokemonLock.Lock()
 	defer pokemonLock.Unlock()
@@ -259,7 +274,7 @@ func GetTileNrFromLocation(location utils.Location, numTilesPerAxis int, tileSid
 
 func (tm *TileManager) LoadGyms(gyms []utils.GymWithServer) {
 
-	tm.gymsFromTile = make(map[int][]utils.GymWithServer, len(gyms))
+	tm.gymsFromTile = sync.Map{}
 
 	for _, gymWithSrv := range gyms {
 		gym := gymWithSrv.Gym
@@ -269,15 +284,23 @@ func (tm *TileManager) LoadGyms(gyms []utils.GymWithServer) {
 				log.Error(err)
 				continue
 			}
-			tm.gymsFromTile[tileNr] = append(tm.gymsFromTile[tileNr], gymWithSrv)
+			gymsInterface, ok := tm.gymsFromTile.Load(tileNr)
+			if !ok {
+				panic("tile not found")
+			}
+
+			// TODO possible data race in array
+			gyms := gymsInterface.(gymsFromTileValueType)
+			tm.gymsFromTile.Store(tileNr, append(gyms, gymWithSrv))
 		} else {
 			log.Infof("Gym %s out of bounds", gym.Name)
 		}
 	}
 
-	for tileNr, gyms := range tm.gymsFromTile {
+	tm.gymsFromTile.Range(func(tileNr, gyms interface{}) bool {
 		log.Infof("Tile %d gyms: %+v", tileNr, gyms)
-	}
+		return true
+	})
 }
 
 func isWithinBounds(location utils.Location, topLeft utils.Location, botRight utils.Location) bool {
@@ -297,8 +320,6 @@ func (tm *TileManager) isBorderTile(topLeft utils.Location, botRight utils.Locat
 }
 
 func (tm *TileManager) logTileManagerState() {
-	log.Infof("Number of active tiles: %d", len(tm.activeTiles))
-
 	numUsers := 0
 	tm.trainerTile.Range(func(_, _ interface{}) bool {
 		numUsers++
@@ -307,22 +328,34 @@ func (tm *TileManager) logTileManagerState() {
 
 	log.Infof("Number of active users: %d", numUsers)
 	// log.Info(tm.trainerTile)
-	for tileNr, tile := range tm.activeTiles {
+
+	counter := 0
+
+	tm.activeTiles.Range(func(tileNr, tileInterface interface{}) bool {
+		tile := tileInterface.(activeTileValueType)
+		counter++
 		log.Infof("---------------------Tile %d---------------------", tileNr)
 		log.Infof("Tile bounds TopLeft:%+v, TopRight:%+v", tile.TopLeftCorner, tile.BotRightCorner)
 		log.Info("Number of active users: ", tile.nrTrainers)
 		log.Info("Number of generated pokemons: ", len(tile.pokemons))
-		log.Info("Number of gyms: ", len(tm.gymsFromTile[tileNr]))
+
+		gymsInterface, _ := tm.gymsFromTile.Load(tileNr)
+		gyms := gymsInterface.(gymsFromTileValueType)
+
+		log.Info("Number of gyms: ", len(gymsInterface.(gymsFromTileValueType)))
 
 		// for i, pokemon := range tile.pokemons {
 		//	log.Infof("Wild pokemon %d location: %+v", i, pokemon.Location)
 		// }
 
-		for _, gymWithSrv := range tm.gymsFromTile[tileNr] {
+		for _, gymWithSrv := range gyms {
 			log.Infof("Gym %s location: %+v", gymWithSrv.Gym.Name, gymWithSrv.Gym.Location)
 		}
 
-	}
+		return true
+	})
+
+	log.Infof("Number of active tiles: %d", counter)
 }
 
 func (tm *TileManager) AddGym(gymWithSrv utils.GymWithServer) error {
@@ -334,7 +367,10 @@ func (tm *TileManager) AddGym(gymWithSrv utils.GymWithServer) error {
 			log.Error(err)
 			return err
 		}
-		tm.gymsFromTile[tileNr] = append(tm.gymsFromTile[tileNr], gymWithSrv)
+
+		gymsInterface, _ := tm.gymsFromTile.Load(tileNr)
+		gyms := gymsInterface.(gymsFromTileValueType)
+		tm.gymsFromTile.Store(tileNr, append(gyms, gymWithSrv))
 		return nil
 	} else {
 		return errors.New(fmt.Sprintf("Gym %s out of bounds", gym.Name))
