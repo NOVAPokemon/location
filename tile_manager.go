@@ -274,7 +274,6 @@ func GetTileNrFromLocation(location utils.Location, numTilesPerAxis int, tileSid
 }
 
 func (tm *TileManager) LoadGyms(gyms []utils.GymWithServer) {
-
 	tm.gymsFromTile = sync.Map{}
 
 	for _, gymWithSrv := range gyms {
@@ -287,10 +286,9 @@ func (tm *TileManager) LoadGyms(gyms []utils.GymWithServer) {
 			}
 			gymsInterface, ok := tm.gymsFromTile.Load(tileNr)
 			if !ok {
-				panic("tile not found")
+				gymsInterface = gymsFromTileValueType{}
 			}
 
-			// TODO possible data race in array
 			gyms := gymsInterface.(gymsFromTileValueType)
 			tm.gymsFromTile.Store(tileNr, append(gyms, gymWithSrv))
 		} else {
