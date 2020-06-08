@@ -285,11 +285,13 @@ func (tm *TileManager) LoadGyms(gyms []utils.GymWithServer) {
 				continue
 			}
 			gymsInterface, ok := tm.gymsFromTile.Load(tileNr)
+			var gyms gymsFromTileValueType
 			if !ok {
-				gymsInterface = gymsFromTileValueType{}
+				gyms = gymsFromTileValueType{}
+			} else {
+				gyms = gymsInterface.(gymsFromTileValueType)
 			}
 
-			gyms := gymsInterface.(gymsFromTileValueType)
 			tm.gymsFromTile.Store(tileNr, append(gyms, gymWithSrv))
 		} else {
 			log.Infof("Gym %s out of bounds", gym.Name)
