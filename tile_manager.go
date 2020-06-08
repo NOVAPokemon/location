@@ -47,7 +47,8 @@ const LatitudeMax = 85.05115
 
 var gymsLock sync.RWMutex
 
-func NewTileManager(gyms []utils.GymWithServer, numTiles int, maxPokemonsPerTile int, pokemonsPerGeneration int, topLeft utils.Location, botRight utils.Location) *TileManager {
+func NewTileManager(gyms []utils.GymWithServer, numTiles int, maxPokemonsPerTile int, pokemonsPerGeneration int,
+	topLeft utils.Location, botRight utils.Location) *TileManager {
 
 	numTilesPerAxis := int(math.Sqrt(float64(numTiles)))
 	tileSide := 360.0 / numTilesPerAxis
