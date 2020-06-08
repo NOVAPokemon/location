@@ -369,8 +369,14 @@ func (tm *TileManager) AddGym(gymWithSrv utils.GymWithServer) error {
 			return err
 		}
 
-		gymsInterface, _ := tm.gymsFromTile.Load(tileNr)
-		gyms := gymsInterface.(gymsFromTileValueType)
+		gymsInterface, ok := tm.gymsFromTile.Load(tileNr)
+		var gyms gymsFromTileValueType
+		if ok {
+			gyms = gymsInterface.(gymsFromTileValueType)
+		} else {
+			gyms = gymsFromTileValueType{}
+		}
+
 		tm.gymsFromTile.Store(tileNr, append(gyms, gymWithSrv))
 		return nil
 	} else {
@@ -382,4 +388,13 @@ func (tm *TileManager) SetBoundaries(topLeftCorner utils.Location, botRightCorne
 	// TODO what to do to clients who become out of region
 	tm.BotRightCorner = botRightCorner
 	tm.TopLeftCorner = topLeftCorner
+}
+
+func (tm *TileManager) SetGyms(gymWithSrv []utils.GymWithServer) error {
+	for _, gymWithSrv := range gymWithSrv {
+		if err := tm.AddGym(gymWithSrv); err != nil {
+			return err
+		}
+	}
+	return nil
 }
