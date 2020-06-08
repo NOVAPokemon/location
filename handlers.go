@@ -38,7 +38,6 @@ var (
 	serverName          string
 	serverNr            int64
 	timeoutInDuration   = time.Duration(config.Timeout) * time.Second
-	tmLock              = sync.RWMutex{}
 	httpClient          = &http.Client{}
 	clientChannels      = sync.Map{}
 	serviceNameHeadless string
@@ -68,7 +67,6 @@ func init() {
 
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
-
 		serverConfig, err := locationdb.GetServerConfig(serverName)
 		if err != nil {
 			if serverNr == 0 {
@@ -87,11 +85,10 @@ func init() {
 			}
 
 			log.Infof("Loaded config: %+v", serverConfig)
-			tmLock.Lock()
 			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
 				serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
-			tmLock.Unlock()
 			go RefreshBoundariesPeriodic()
+			go refreshGymsPeriodic()
 			return
 		}
 	}
@@ -118,6 +115,21 @@ func insertDefaultBoundariesInDB() error {
 	return nil
 }
 
+func refreshGymsPeriodic() {
+	for {
+		time.Sleep(time.Duration(config.UpdateGymsInterval) * time.Second)
+		gyms, err := locationdb.GetGyms()
+		if err != nil {
+			log.Error(err)
+			continue
+		}
+		if err := tm.SetGyms(gyms); err != nil {
+			log.Error(err)
+			continue
+		}
+	}
+}
+
 func RefreshBoundariesPeriodic() {
 	for {
 		serverConfig, err := locationdb.GetServerConfig(serverName)
@@ -125,9 +137,7 @@ func RefreshBoundariesPeriodic() {
 			log.Error(err)
 		} else {
 			log.Infof("Loaded boundaries: %+v", *serverConfig)
-			tmLock.RLock()
 			tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
-			tmLock.RLock()
 		}
 		time.Sleep(time.Duration(config.UpdateConfigsInterval) * time.Second)
 	}
@@ -141,25 +151,19 @@ func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tmLock.RLock()
-	err = tm.AddGym(gym)
+	err = locationdb.UpdateIfAbsentAddGym(gym)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapAddGymError(err), http.StatusInternalServerError)
 		return
 	}
 
-	err = locationdb.AddGym(gym)
-	if err != nil {
-		utils.LogAndSendHTTPError(&w, wrapAddGymError(err), http.StatusInternalServerError)
-		return
+	if isWithinBounds(gym.Gym.Location, tm.TopLeftCorner, tm.BotRightCorner) {
+		err = tm.AddGym(gym)
+		if err != nil {
+			log.Error(wrapAddGymError(err))
+			return
+		}
 	}
-
-	err = tm.AddGym(gym)
-	if err != nil {
-		utils.LogAndSendHTTPError(&w, wrapAddGymError(err), http.StatusInternalServerError)
-		return
-	}
-	tmLock.RUnlock()
 }
 
 func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
@@ -459,8 +463,6 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 		}
 
 		locationMsg := desMsg.(*location.UpdateLocationMessage)
-		tmLock.RLock()
-
 		regionNr, err := tm.SetTrainerLocation(user, locationMsg.Location)
 		if err != nil {
 			return wrapHandleLocationMsgs(err)
@@ -471,9 +473,6 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 		if err != nil {
 			return wrapHandleLocationMsgs(err)
 		}
-
-		tmLock.RUnlock()
-
 		channelGeneric, ok := clientChannels.Load(user)
 		if !ok {
 			return nil
@@ -499,9 +498,7 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 }
 
 func setServerRegionConfig(serverConfig *utils.LocationServerBoundary) {
-	tmLock.Lock()
 	tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
-	tmLock.Unlock()
 }
 
 func HandleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {

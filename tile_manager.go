@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -64,7 +63,21 @@ func NewTileManager(gyms []utils.GymWithServer, numTiles int, maxPokemonsPerTile
 		maxPokemonsPerGeneration: pokemonsPerGeneration,
 	}
 	toReturn.LoadGyms(gyms)
+	go toReturn.logActiveGymsPeriodic()
 	return toReturn
+}
+
+func (tm *TileManager) logActiveGymsPeriodic() {
+	for {
+		log.Info("Active gyms:")
+		tm.gymsFromTile.Range(func(k, v interface{}) bool {
+			for _, gym := range v.(gymsFromTileValueType) {
+				log.Infof("Gym name: %s, Gym location: %+v", gym.Gym.Name, gym.Gym.Location)
+			}
+			return true
+		})
+		time.Sleep(30 * time.Second)
+	}
 }
 
 func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Location) (int, error) {
@@ -275,7 +288,6 @@ func GetTileNrFromLocation(location utils.Location, numTilesPerAxis int, tileSid
 
 func (tm *TileManager) LoadGyms(gyms []utils.GymWithServer) {
 	tm.gymsFromTile = sync.Map{}
-
 	for _, gymWithSrv := range gyms {
 		gym := gymWithSrv.Gym
 		if isWithinBounds(gym.Location, tm.TopLeftCorner, tm.BotRightCorner) {
@@ -291,8 +303,8 @@ func (tm *TileManager) LoadGyms(gyms []utils.GymWithServer) {
 			} else {
 				gyms = gymsInterface.(gymsFromTileValueType)
 			}
-
-			tm.gymsFromTile.Store(tileNr, append(gyms, gymWithSrv))
+			gyms = append(gyms, gymWithSrv)
+			tm.gymsFromTile.Store(tileNr, gyms)
 		} else {
 			log.Infof("Gym %s out of bounds", gym.Name)
 		}
@@ -326,10 +338,8 @@ func (tm *TileManager) logTileManagerState() {
 		numUsers++
 		return true
 	})
-
 	log.Infof("Number of active users: %d", numUsers)
 	// log.Info(tm.trainerTile)
-
 	counter := 0
 
 	tm.activeTiles.Range(func(tileNr, tileInterface interface{}) bool {
@@ -339,49 +349,32 @@ func (tm *TileManager) logTileManagerState() {
 		log.Infof("Tile bounds TopLeft:%+v, TopRight:%+v", tile.TopLeftCorner, tile.BotRightCorner)
 		log.Info("Number of active users: ", tile.nrTrainers)
 		log.Info("Number of generated pokemons: ", len(tile.pokemons))
-
-		gymsInterface, _ := tm.gymsFromTile.Load(tileNr)
-		gyms := gymsInterface.(gymsFromTileValueType)
-
-		log.Info("Number of gyms: ", len(gymsInterface.(gymsFromTileValueType)))
-
-		// for i, pokemon := range tile.pokemons {
-		//	log.Infof("Wild pokemon %d location: %+v", i, pokemon.Location)
-		// }
-
-		for _, gymWithSrv := range gyms {
-			log.Infof("Gym %s location: %+v", gymWithSrv.Gym.Name, gymWithSrv.Gym.Location)
-		}
-
 		return true
 	})
-
 	log.Infof("Number of active tiles: %d", counter)
 }
 
 func (tm *TileManager) AddGym(gymWithSrv utils.GymWithServer) error {
 	gym := gymWithSrv.Gym
-	if isWithinBounds(gym.Location, tm.TopLeftCorner, tm.BotRightCorner) {
-		log.Infof("Adding gym %s", gym.Name)
-		tileNr, err := GetTileNrFromLocation(gym.Location, tm.numTilesPerAxis, tm.tileSideLength)
-		if err != nil {
-			log.Error(err)
-			return err
-		}
-
-		gymsInterface, ok := tm.gymsFromTile.Load(tileNr)
-		var gyms gymsFromTileValueType
-		if ok {
-			gyms = gymsInterface.(gymsFromTileValueType)
-		} else {
-			gyms = gymsFromTileValueType{}
-		}
-
-		tm.gymsFromTile.Store(tileNr, append(gyms, gymWithSrv))
-		return nil
-	} else {
-		return errors.New(fmt.Sprintf("Gym %s out of bounds", gym.Name))
+	tileNr, err := GetTileNrFromLocation(gym.Location, tm.numTilesPerAxis, tm.tileSideLength)
+	if err != nil {
+		log.Error(err)
+		return err
 	}
+	gymsInterface, ok := tm.gymsFromTile.Load(tileNr)
+	var gyms gymsFromTileValueType
+	if ok {
+		gyms = gymsInterface.(gymsFromTileValueType)
+		for i := 0; i < len(gyms); i++ {
+			if gyms[i].Gym.Name == gymWithSrv.Gym.Name {
+				return nil
+			}
+		}
+	} else {
+		gyms = gymsFromTileValueType{}
+	}
+	tm.gymsFromTile.Store(tileNr, append(gyms, gymWithSrv))
+	return nil
 }
 
 func (tm *TileManager) SetBoundaries(topLeftCorner utils.Location, botRightCorner utils.Location) {
@@ -392,8 +385,12 @@ func (tm *TileManager) SetBoundaries(topLeftCorner utils.Location, botRightCorne
 
 func (tm *TileManager) SetGyms(gymWithSrv []utils.GymWithServer) error {
 	for _, gymWithSrv := range gymWithSrv {
-		if err := tm.AddGym(gymWithSrv); err != nil {
-			return err
+		if isWithinBounds(gymWithSrv.Gym.Location, tm.TopLeftCorner, tm.BotRightCorner) {
+			if err := tm.AddGym(gymWithSrv); err != nil {
+				return err
+			}
+		} else {
+			continue
 		}
 	}
 	return nil
