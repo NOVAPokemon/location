@@ -333,6 +333,13 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 }
 
 func handleLocationMsg(user string, msg *ws.Message) error {
+
+	channelGeneric, ok := clientChannels.Load(user)
+	if !ok {
+		return nil
+	}
+	channel := channelGeneric.(valueType)
+
 	switch msg.MsgType {
 	case location.CatchPokemon:
 		desMsg, err := location.DeserializeLocationMsg(msg)
@@ -342,35 +349,24 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 		catchPokemonMsg := desMsg.(*location.CatchWildPokemonMessage)
 		pokeball := catchPokemonMsg.Pokeball
 		if !pokeball.IsPokeBall() {
-			msgBytes := []byte(location.CatchWildPokemonMessageResponse{
-				Error: wrapCatchWildPokemonError(errorInvalidItemCatch),
-			}.SerializeToWSMessage().Serialize())
-			channelGeneric, ok := clientChannels.Load(user)
-			if !ok {
-				return nil
-			}
 
-			channel := channelGeneric.(valueType)
+			msgBytes := []byte(location.CatchWildPokemonMessageResponse{
+				Error: wrapCatchWildPokemonError(errorInvalidItemCatch).Error(),
+			}.SerializeToWSMessage().Serialize())
+
 			channel <- ws.GenericMsg{
 				MsgType: websocket.TextMessage,
 				Data:    msgBytes,
 			}
-
 			return nil
 		}
 
 		regionNrInterface, ok := tm.GetTrainerTile(user)
 		if !ok {
 			msgBytes := []byte(location.CatchWildPokemonMessageResponse{
-				Error: wrapCatchWildPokemonError(errorLocationNotTracked),
+				Error: wrapCatchWildPokemonError(errorLocationNotTracked).Error(),
 			}.SerializeToWSMessage().Serialize())
 
-			channelGeneric, ok := clientChannels.Load(user)
-			if !ok {
-				return nil
-			}
-
-			channel := channelGeneric.(valueType)
 			channel <- ws.GenericMsg{
 				MsgType: websocket.TextMessage,
 				Data:    msgBytes,
@@ -382,16 +378,11 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 
 		pokemon, err := tm.RemoveWildPokemonFromTile(regionNr, catchPokemonMsg.Pokemon)
 		if err != nil {
+
 			msgBytes := []byte(location.CatchWildPokemonMessageResponse{
-				Error: wrapCatchWildPokemonError(err),
+				Error: wrapCatchWildPokemonError(err).Error(),
 			}.SerializeToWSMessage().Serialize())
 
-			channelGeneric, ok := clientChannels.Load(user)
-			if !ok {
-				return nil
-			}
-
-			channel := channelGeneric.(valueType)
 			channel <- ws.GenericMsg{
 				MsgType: websocket.TextMessage,
 				Data:    msgBytes,
@@ -406,6 +397,7 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 			catchingProbability = 1 - ((float64(pokemon.Level) / config.MaxLevel) *
 				(float64(pokeball.Effect.Value) / maxCatchingProbability))
 		}
+
 		log.Info("catching probability: ", catchingProbability)
 		caught := rand.Float64() <= catchingProbability
 		var pokemonTokens []string
@@ -413,21 +405,17 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 			var trainersClient = clients.NewTrainersClient(httpClient)
 			_, err = trainersClient.AddPokemonToTrainer(user, *pokemon)
 			if err != nil {
+
 				msgBytes := []byte(location.CatchWildPokemonMessageResponse{
-					Error: wrapHandleLocationMsgs(err),
+					Error: wrapHandleLocationMsgs(err).Error(),
 				}.SerializeToWSMessage().Serialize())
 
-				channelGeneric, ok := clientChannels.Load(user)
-				if !ok {
-					return nil
-				}
-
-				channel := channelGeneric.(valueType)
 				channel <- ws.GenericMsg{
 					MsgType: websocket.TextMessage,
 					Data:    msgBytes,
 				}
 				return err
+
 			}
 			pokemonTokens = make([]string, 0, len(trainersClient.PokemonTokens))
 			for _, tokenString := range trainersClient.PokemonTokens {
@@ -438,15 +426,9 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
 			Caught:        caught,
 			PokemonTokens: pokemonTokens,
-			Error:         nil,
+			Error:         "",
 		}.SerializeToWSMessage().Serialize())
 
-		channelGeneric, ok := clientChannels.Load(user)
-		if !ok {
-			return nil
-		}
-
-		channel := channelGeneric.(valueType)
 		channel <- ws.GenericMsg{
 			MsgType: websocket.TextMessage,
 			Data:    msgBytes,
