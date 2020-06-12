@@ -92,7 +92,7 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 		if lastTile == tileNr {
 			// user remained in the same tile, no need to check if tile exists because tiles cant be deleted with
 			// a user there
-			//logrus.Infof("Trainer %s is still in the same tile (%d)", trainerId, tileNr)
+			// logrus.Infof("Trainer %s is still in the same tile (%d)", trainerId, tileNr)
 			return tileNr, nil
 		}
 	}
