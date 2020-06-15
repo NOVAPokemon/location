@@ -209,7 +209,7 @@ func (tm *TileManager) generateWildPokemonsForZonePeriodically(zoneNr int) {
 			log.Warnf("Stopped generating pokemons for zone %d due to missing zone", zoneNr)
 			return
 		}
-		tile := tileInterface.(Tile)
+		tile := tileInterface.(*Tile)
 
 		log.Info("Refreshing wild pokemons...")
 		nrPokemons := 0
