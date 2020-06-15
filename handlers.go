@@ -157,7 +157,7 @@ func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if isWithinBounds(gym.Gym.Location, tm.TopLeftCorner, tm.BotRightCorner) {
+	if tm.isWithinBounds(gym.Gym.Location) {
 		err = tm.AddGym(gym)
 		if err != nil {
 			log.Error(wrapAddGymError(err))
