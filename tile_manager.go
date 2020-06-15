@@ -377,6 +377,8 @@ func (tm *TileManager) AddGym(gymWithSrv utils.GymWithServer) error {
 
 func (tm *TileManager) SetBoundaries(topLeftCorner utils.Location, botRightCorner utils.Location) {
 	// TODO what to do to clients who become out of region
+	tm.boundariesLock.Lock()
+	tm.boundariesLock.Unlock()
 	tm.botRightCorner = botRightCorner
 	tm.topLeftCorner = topLeftCorner
 }
