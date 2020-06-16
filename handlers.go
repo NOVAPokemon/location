@@ -137,7 +137,7 @@ func RefreshBoundariesPeriodic() {
 		if err != nil {
 			log.Error(err)
 		} else {
-			log.Infof("Loaded boundaries: TopLeft: {%d,%d},  BotRight: {%d,%d}",
+			log.Infof("Loaded boundaries: TopLeft: {%f,%f},  BotRight: {%f,%f}",
 				serverConfig.BotRightCorner.Latitude,
 				serverConfig.BotRightCorner.Longitude,
 				serverConfig.BotRightCorner.Latitude,
