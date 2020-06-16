@@ -132,14 +132,18 @@ func refreshGymsPeriodic() {
 
 func RefreshBoundariesPeriodic() {
 	for {
+		time.Sleep(time.Duration(config.UpdateConfigsInterval) * time.Second)
 		serverConfig, err := locationdb.GetServerConfig(serverName)
 		if err != nil {
 			log.Error(err)
 		} else {
-			log.Infof("Loaded boundaries: %+v", *serverConfig)
+			log.Infof("Loaded boundaries: TopLeft: {%d,%d},  BotRight: {%d,%d}",
+				serverConfig.BotRightCorner.Latitude,
+				serverConfig.BotRightCorner.Longitude,
+				serverConfig.BotRightCorner.Latitude,
+				serverConfig.BotRightCorner.Longitude)
 			tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
 		}
-		time.Sleep(time.Duration(config.UpdateConfigsInterval) * time.Second)
 	}
 }
 
