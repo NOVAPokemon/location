@@ -312,15 +312,17 @@ func (tm *TileManager) LoadGyms(gyms []utils.GymWithServer) {
 
 func (tm *TileManager) isWithinBounds(location utils.Location) bool {
 	tm.boundariesLock.RLock()
-	defer tm.boundariesLock.RUnlock()
-	return isWithinBounds(location, tm.topLeftCorner, tm.botRightCorner)
+	res := isWithinBounds(location, tm.topLeftCorner, tm.botRightCorner)
+	tm.boundariesLock.RUnlock()
+	return res
 }
 
 func (tm *TileManager) isBorderTile(topLeft utils.Location, botRight utils.Location) bool {
 	tm.boundariesLock.RLock()
-	defer tm.boundariesLock.RUnlock()
-	return topLeft.Longitude == tm.topLeftCorner.Longitude || topLeft.Latitude == tm.topLeftCorner.Latitude ||
+	res := topLeft.Longitude == tm.topLeftCorner.Longitude || topLeft.Latitude == tm.topLeftCorner.Latitude ||
 		botRight.Latitude == tm.topLeftCorner.Latitude || botRight.Longitude == tm.botRightCorner.Longitude
+	tm.boundariesLock.RUnlock()
+	return res
 }
 
 func (tm *TileManager) logTileManagerState() {
@@ -378,9 +380,10 @@ func (tm *TileManager) AddGym(gymWithSrv utils.GymWithServer) error {
 func (tm *TileManager) SetBoundaries(topLeftCorner utils.Location, botRightCorner utils.Location) {
 	// TODO what to do to clients who become out of region
 	tm.boundariesLock.Lock()
-	defer tm.boundariesLock.Unlock()
 	tm.botRightCorner = botRightCorner
 	tm.topLeftCorner = topLeftCorner
+	tm.boundariesLock.Unlock()
+	
 }
 
 func (tm *TileManager) SetGyms(gymWithSrv []utils.GymWithServer) error {
