@@ -295,11 +295,11 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		case <-pingTicker.C:
-			outChan <- ws.GenericMsg{
-				MsgType: websocket.PingMessage,
-				Data:    []byte{},
-			}
 			// log.Warn("Pinging")
+			select {
+			case <-finish:
+			case outChan <- ws.GenericMsg{MsgType: websocket.PingMessage, Data: []byte{}}:
+			}
 		case <-finish:
 			log.Infof("Stopped tracking user %s location", user)
 			return
