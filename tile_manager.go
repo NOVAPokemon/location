@@ -108,7 +108,7 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 			tile.nrTrainers++
 			tile.nrTrainerMutex.Unlock()
 		}
-		tm.logTileManagerState()
+		//tm.logTileManagerState()
 	} else {
 		// no tile initialized for user
 		logrus.Infof("Created new tile (%d) for trainer: %s", tileNr, trainerId)
@@ -122,7 +122,7 @@ func (tm *TileManager) SetTrainerLocation(trainerId string, location utils.Locat
 		}
 		tm.activeTiles.Store(tileNr, tile)
 		go tm.generateWildPokemonsForZonePeriodically(tileNr)
-		tm.logTileManagerState()
+		//tm.logTileManagerState()
 	}
 
 	tm.trainerTile.Store(trainerId, tileNr)
@@ -383,7 +383,7 @@ func (tm *TileManager) SetBoundaries(topLeftCorner utils.Location, botRightCorne
 	tm.botRightCorner = botRightCorner
 	tm.topLeftCorner = topLeftCorner
 	tm.boundariesLock.Unlock()
-	
+
 }
 
 func (tm *TileManager) SetGyms(gymWithSrv []utils.GymWithServer) error {

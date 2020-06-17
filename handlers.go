@@ -348,7 +348,15 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 	case location.CatchPokemon:
 		desMsg, err := location.DeserializeLocationMsg(msg)
 		if err != nil {
-			return wrapHandleLocationMsgs(err)
+			msgBytes := []byte(location.CatchWildPokemonMessageResponse{
+				Error: wrapCatchWildPokemonError(err).Error(),
+			}.SerializeToWSMessage().Serialize())
+
+			channel <- ws.GenericMsg{
+				MsgType: websocket.TextMessage,
+				Data:    msgBytes,
+			}
+			return wrapCatchWildPokemonError(err)
 		}
 		catchPokemonMsg := desMsg.(*location.CatchWildPokemonMessage)
 		pokeball := catchPokemonMsg.Pokeball
