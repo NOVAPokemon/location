@@ -257,7 +257,11 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
-	defer ws.CloseConnection(conn)
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Error(err)
+		}
+	}()
 
 	_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 	conn.SetPongHandler(func(string) error {
