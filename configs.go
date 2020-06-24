@@ -26,4 +26,7 @@ type LocationServerConfig struct {
 	NumTilesInWorld    int            `json:"num_tiles"`
 	TopLeftCorner      utils.Location `json:"topLeftCorner"`
 	BotRightCorner     utils.Location `json:"botRightCorner"`
+
+	EntryBoundarySize float64 `json:"entry_boundary_size"`
+	ExitBoundarySize  float64 `json:"exit_boundary_size"`
 }
