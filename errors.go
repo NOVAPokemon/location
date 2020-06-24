@@ -16,7 +16,6 @@ const (
 
 var (
 	errorInvalidItemCatch   = errors.New("invalid item to catch")
-	errorLocationNotTracked = errors.New("location not being tracked")
 )
 
 // Wrappers handlers

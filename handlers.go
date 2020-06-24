@@ -353,7 +353,7 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 func handleLocationMsg(user string, msg *ws.Message) error {
 	channelGeneric, ok := clientChannels.Load(user)
 	if !ok {
-		return nil
+		return wrapHandleLocationMsgs(errors.New("user not registered in this server"))
 	}
 	channel := channelGeneric.(valueType)
 
@@ -365,102 +365,6 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 	default:
 		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
 	}
-}
-
-func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.GenericMsg) error {
-	desMsg, err := location.DeserializeLocationMsg(msg)
-	if err != nil {
-		return wrapHandleLocationMsgs(err)
-	}
-
-	locationMsg := desMsg.(*location.UpdateLocationMessage)
-	currentTiles, changed, err := tm.UpdateTrainerTiles(user, locationMsg.Location)
-	if err != nil {
-		return err
-	}
-
-	tilesPerServer, err := getServersForTiles(currentTiles...)
-	if err != nil {
-		return err
-	}
-
-	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
-	myTiles := tilesPerServer[myServer]
-
-	gymsInVicinity := tm.getGymsInTiles(myTiles...)
-	pokemonInVicinity, err := tm.getPokemonsInTiles(myTiles...)
-	if err != nil {
-		return wrapHandleLocationMsgs(err)
-	}
-
-	channel <- ws.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data:    []byte(location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()),
-	}
-
-	// TODO send pokemons with server
-	channel <- ws.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data: []byte(location.PokemonMessage{
-			Pokemon: pokemonInVicinity,
-		}.SerializeToWSMessage().Serialize()),
-	}
-
-	if changed {
-		var servers []string
-		for server := range tilesPerServer {
-			servers = append(servers, server)
-		}
-
-		channel <- ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data: []byte(location.ConnectToServersMessage{
-				Servers: servers,
-			}.SerializeToWSMessage().Serialize()),
-		}
-	}
-
-	return nil
-}
-
-func getServersForTiles(tileNrs ...int) (map[string][]int, error) {
-	configs, err := locationdb.GetAllServerConfigs() // TODO Can be optimized, instead of fetching all the configs and looping
-	if err != nil {
-		return nil, err
-	}
-
-	servers := map[string][]int{}
-	for serverName, config := range configs {
-		for i := range tileNrs {
-			loc := locationUtils.GetTileCenterLocationFromTileNr(tileNrs[i], tm.numTilesPerAxis, tm.tileSideLength)
-			if locationUtils.IsWithinBounds(loc, config.TopLeftCorner, config.BotRightCorner) {
-				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
-				servers[serverAddr] = append(servers[serverAddr], tileNrs[i])
-			}
-		}
-	}
-
-	return servers, nil
-}
-
-func getServersForLocations(locations ...utils.Location) ([]string, error) {
-	configs, err := locationdb.GetAllServerConfigs() // TODO Can be optimized, instead of fetching all the configs and looping
-	if err != nil {
-		return nil, err
-	}
-
-	var servers []string
-
-	for serverName, config := range configs {
-		for _, loc := range locations {
-			if locationUtils.IsWithinBounds(loc, config.TopLeftCorner, config.BotRightCorner) {
-				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
-				servers = append(servers, serverAddr)
-			}
-		}
-	}
-
-	return servers, nil
 }
 
 func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.GenericMsg) error {
@@ -561,6 +465,110 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 		Data:    msgBytes,
 	}
 	return nil
+}
+
+func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.GenericMsg) error {
+	desMsg, err := location.DeserializeLocationMsg(msg)
+	if err != nil {
+		return wrapHandleLocationMsgs(err)
+	}
+
+	locationMsg := desMsg.(*location.UpdateLocationMessage)
+
+	boundary := tm.CalculateBoundaryForLocation(locationMsg.Location, tm.exitBoundarySize)
+	exitRect := locationUtils.BoundaryToRect(boundary)
+	serverBoundsRect := locationUtils.BoundaryToRect(tm.boundary)
+	if !exitRect.Intersects(serverBoundsRect) {
+		return errors.New("out of bounds of the server")
+	}
+
+	currentTiles, changed, err := tm.UpdateTrainerTiles(user, locationMsg.Location)
+	if err != nil {
+		return err
+	}
+
+	tilesPerServer, err := getServersForTiles(currentTiles...)
+	if err != nil {
+		return err
+	}
+
+	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+	myTiles := tilesPerServer[myServer]
+
+	gymsInVicinity := tm.getGymsInTiles(myTiles...)
+	pokemonInVicinity, err := tm.getPokemonsInTiles(myTiles...)
+	if err != nil {
+		return wrapHandleLocationMsgs(err)
+	}
+
+	channel <- ws.GenericMsg{
+		MsgType: websocket.TextMessage,
+		Data:    []byte(location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()),
+	}
+
+	// TODO send pokemons with server
+	channel <- ws.GenericMsg{
+		MsgType: websocket.TextMessage,
+		Data: []byte(location.PokemonMessage{
+			Pokemon: pokemonInVicinity,
+		}.SerializeToWSMessage().Serialize()),
+	}
+
+	if changed {
+		var servers []string
+		for server := range tilesPerServer {
+			servers = append(servers, server)
+		}
+
+		channel <- ws.GenericMsg{
+			MsgType: websocket.TextMessage,
+			Data: []byte(location.ConnectToServersMessage{
+				Servers: servers,
+			}.SerializeToWSMessage().Serialize()),
+		}
+	}
+
+	return nil
+}
+
+func getServersForTiles(tileNrs ...int) (map[string][]int, error) {
+	configs, err := locationdb.GetAllServerConfigs() // TODO Can be optimized, instead of fetching all the configs and looping
+	if err != nil {
+		return nil, err
+	}
+
+	servers := map[string][]int{}
+	for serverName, config := range configs {
+		for i := range tileNrs {
+			loc := tm.GetTileCenterLocationFromTileNr(tileNrs[i])
+			if locationUtils.IsWithinBounds(loc, config.TopLeftCorner, config.BotRightCorner) {
+				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+				servers[serverAddr] = append(servers[serverAddr], tileNrs[i])
+			}
+		}
+	}
+
+	return servers, nil
+}
+
+func getServersForLocations(locations ...utils.Location) ([]string, error) {
+	configs, err := locationdb.GetAllServerConfigs() // TODO Can be optimized, instead of fetching all the configs and looping
+	if err != nil {
+		return nil, err
+	}
+
+	var servers []string
+
+	for serverName, config := range configs {
+		for _, loc := range locations {
+			if locationUtils.IsWithinBounds(loc, config.TopLeftCorner, config.BotRightCorner) {
+				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+				servers = append(servers, serverAddr)
+			}
+		}
+	}
+
+	return servers, nil
 }
 
 func setServerRegionConfig(serverConfig *utils.LocationServerBoundary) {

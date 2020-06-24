@@ -87,11 +87,12 @@ func isPerfectSquare(nr int) bool {
 
 }
 
-func generateWildPokemons(toGenerate int, pokemonSpecies []string, topLeft utils.Location, botRight utils.Location) []utils.WildPokemon {
+func generateWildPokemons(toGenerate int, pokemonSpecies []string, topLeft utils.Location,
+	botRight utils.Location) []utils.WildPokemonWithServer {
 	stdHPDeviation := config.MaxHP / 20
 	stdDamageDeviation := config.MaxDamage / 20
 	regionSize := topLeft.Latitude - botRight.Latitude
-	pokemonsArr := make([]utils.WildPokemon, 0, config.NumberOfPokemonsToGenerate)
+	pokemonsArr := make([]utils.WildPokemonWithServer, 0, config.NumberOfPokemonsToGenerate)
 
 	if len(pokemonSpecies) == 0 {
 		log.Panic("array pokemonSpecies is empty")
@@ -100,12 +101,13 @@ func generateWildPokemons(toGenerate int, pokemonSpecies []string, topLeft utils
 	for i := 0; i < toGenerate; i++ {
 		pokemon := *pokemons.GetOneWildPokemon(config.MaxLevel, stdHPDeviation,
 			config.MaxHP, stdDamageDeviation, config.MaxDamage, pokemonSpecies[rand.Intn(len(pokemonSpecies)-1)])
-		wildPokemon := utils.WildPokemon{
+		wildPokemon := utils.WildPokemonWithServer{
 			Pokemon: pokemon,
 			Location: utils.Location{
 				Latitude:  topLeft.Latitude - rand.Float64()*regionSize,
 				Longitude: topLeft.Longitude + rand.Float64()*regionSize,
 			},
+			Server: serverName,
 		}
 		pokemonsArr = append(pokemonsArr, wildPokemon)
 	}

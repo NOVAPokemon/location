@@ -26,7 +26,7 @@ func TestTileManager_GetTileNrFromLocation(t *testing.T) {
 		Longitude: -90,
 	}
 
-	tileNr, err := GetTileNrFromLocation(locationInTile0, rm.numTilesPerAxis, rm.tileSideLength)
+	tileNr, _, _, err := rm.GetTileNrFromLocation(locationInTile0)
 
 	if err != nil {
 		t.Error(err)
@@ -43,7 +43,7 @@ func TestTileManager_GetTileNrFromLocation(t *testing.T) {
 		Longitude: 90,
 	}
 
-	tileNr, err = GetTileNrFromLocation(locationInTile1, rm.numTilesPerAxis, rm.tileSideLength)
+	tileNr, _, _, err = rm.GetTileNrFromLocation(locationInTile1)
 
 	if err != nil {
 		t.Error(err)
@@ -60,7 +60,7 @@ func TestTileManager_GetTileNrFromLocation(t *testing.T) {
 		Longitude: -90,
 	}
 
-	tileNr, err = GetTileNrFromLocation(locationInTile2, rm.numTilesPerAxis, rm.tileSideLength)
+	tileNr, _, _, err = rm.GetTileNrFromLocation(locationInTile2)
 
 	if err != nil {
 		t.Error(err)
@@ -77,7 +77,7 @@ func TestTileManager_GetTileNrFromLocation(t *testing.T) {
 		Longitude: 90,
 	}
 
-	tileNr, err = GetTileNrFromLocation(locationInTile3, rm.numTilesPerAxis, rm.tileSideLength)
+	tileNr, _, _, err = rm.GetTileNrFromLocation(locationInTile3)
 
 	if err != nil {
 		t.Error(err)
@@ -98,7 +98,7 @@ func TestTileManager_GetTileBoundsFromTileNr(t *testing.T) {
 			utils.Location{Latitude: -LatitudeMax, Longitude: 180})
 	)
 
-	topLeft, botRight := rm.GetTileBoundsFromTileNr(0)
+	topLeft, botRight := tm.GetTileBoundsFromTileNr(0)
 
 	if topLeft.Latitude != 180.0 {
 		t.Error(fmt.Sprintf("tile 0 bot left Latitude is %f, should be %f", topLeft.Latitude, 180.0))

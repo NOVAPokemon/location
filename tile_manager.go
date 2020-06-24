@@ -110,8 +110,8 @@ func (tm *TileManager) GetTrainerTile(trainerId string) (interface{}, bool) {
 	return tileNrInterface, ok
 }
 
-func (tm *TileManager) getPokemonsInTiles(tileNrs ...int) ([]utils.WildPokemon, error) {
-	var pokemonsInTiles []utils.WildPokemon
+func (tm *TileManager) getPokemonsInTiles(tileNrs ...int) ([]utils.WildPokemonWithServer, error) {
+	var pokemonsInTiles []utils.WildPokemonWithServer
 
 	for tileNr := range tileNrs {
 		tileInterface, ok := tm.activeTiles.Load(tileNr)
@@ -121,7 +121,7 @@ func (tm *TileManager) getPokemonsInTiles(tileNrs ...int) ([]utils.WildPokemon, 
 
 		tile := tileInterface.(activeTileValueType)
 		tile.pokemons.Range(func(key, value interface{}) bool {
-			pokemonsInTiles = append(pokemonsInTiles, value.(utils.WildPokemon))
+			pokemonsInTiles = append(pokemonsInTiles, value.(utils.WildPokemonWithServer))
 			return true
 		})
 	}
@@ -205,7 +205,7 @@ func (tm *TileManager) RemoveWildPokemonFromTile(tileNr int, pokemonId string) (
 		return nil, errors.New("pokemon not found")
 	} else {
 		tile.pokemons.Delete(pokemonId)
-		toReturn := value.(utils.WildPokemon).Pokemon
+		toReturn := value.(utils.WildPokemonWithServer).Pokemon
 		return &toReturn, nil
 	}
 }
@@ -267,7 +267,7 @@ func (tm *TileManager) UpdateTrainerTiles(trainerId string, location utils.Locat
 				continue
 			}
 
-			topLeft, botRight := locationUtils.GetTileBoundsFromTileNr(toAdd[i], tm.numTilesPerAxis, tm.tileSideLength)
+			topLeft, botRight := tm.GetTileBoundsFromTileNr(toAdd[i])
 			tile := &Tile{
 				nrTrainers:     1,
 				pokemons:       sync.Map{},
@@ -341,16 +341,7 @@ func (tm *TileManager) calculateLocationTileChanges(trainerId string, location u
 
 func (tm *TileManager) getBoundaryTiles(location utils.Location, boundarySize float64) ([]int, error) {
 	// CALCULATE TILES WHICH ARE PART OF MY EXIT NEIGHBORHOOD
-	boundary := utils.Boundary{
-		TopLeft: utils.Location{
-			Latitude:  location.Latitude + (boundarySize * tm.tileSideLength),
-			Longitude: location.Longitude - (boundarySize * tm.tileSideLength),
-		},
-		BottomRight: utils.Location{
-			Latitude:  location.Latitude - (boundarySize * tm.tileSideLength),
-			Longitude: location.Longitude + (boundarySize * tm.tileSideLength),
-		},
-	}
+	boundary := tm.CalculateBoundaryForLocation(location, boundarySize)
 
 	_, topBoundaryRow, topBoundaryCol, err := tm.GetTileNrFromLocation(boundary.TopLeft)
 	if err != nil {
@@ -376,6 +367,19 @@ func (tm *TileManager) getBoundaryTiles(location utils.Location, boundarySize fl
 	}
 
 	return tileNrs, nil
+}
+
+func (tm *TileManager) CalculateBoundaryForLocation(location utils.Location, boundarySize float64) utils.Boundary {
+	return utils.Boundary{
+		TopLeft: utils.Location{
+			Latitude:  location.Latitude + (boundarySize * tm.tileSideLength),
+			Longitude: location.Longitude - (boundarySize * tm.tileSideLength),
+		},
+		BottomRight: utils.Location{
+			Latitude:  location.Latitude - (boundarySize * tm.tileSideLength),
+			Longitude: location.Longitude + (boundarySize * tm.tileSideLength),
+		},
+	}
 }
 
 func (tm *TileManager) LoadGyms(gyms []utils.GymWithServer) {
@@ -494,4 +498,27 @@ func (tm *TileManager) SetGyms(gymWithSrv []utils.GymWithServer) error {
 		}
 	}
 	return nil
+}
+
+func (tm *TileManager) GetTileBoundsFromTileNr(tileNr int) (topLeft utils.Location, botRight utils.Location) {
+	topLeft = utils.Location{
+		Longitude: (float64(tileNr%tm.numTilesPerAxis))*tm.tileSideLength - 180.0,
+		Latitude:  180 - float64(tileNr)/float64(tm.numTilesPerAxis)*tm.tileSideLength,
+	}
+
+	botRight = utils.Location{
+		Latitude:  topLeft.Latitude - tm.tileSideLength,
+		Longitude: topLeft.Longitude + tm.tileSideLength,
+	}
+
+	return topLeft, botRight
+}
+
+func (tm *TileManager) GetTileCenterLocationFromTileNr(tileNr int) utils.Location {
+	topLeft, _ := tm.GetTileBoundsFromTileNr(tileNr)
+
+	return utils.Location{
+		Latitude:  topLeft.Latitude - (tm.tileSideLength / 2),
+		Longitude: topLeft.Longitude + (tm.tileSideLength / 2),
+	}
 }
