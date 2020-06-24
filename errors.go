@@ -9,6 +9,7 @@ import (
 
 const (
 	errorHandleLocationMsg    = "error handling location message"
+	errorHandleLocationWithTilesMsg    = "error handling location with tiles message"
 	errorLoadServerBoundaries = "error loading server boundaries"
 	errorCatchingPokemon      = "error catching pokemon"
 	errorInit                 = "error in INIT"
@@ -46,6 +47,10 @@ func wrapGetServerForLocation(err error) error {
 // Wrappers other functions
 func wrapHandleLocationMsgs(err error) error {
 	return errors.Wrap(err, errorHandleLocationMsg)
+}
+
+func wrapHandleLocationWithTilesMsgs(err error) error {
+	return errors.Wrap(err, errorHandleLocationWithTilesMsg)
 }
 
 func WrapInit(err error) error {

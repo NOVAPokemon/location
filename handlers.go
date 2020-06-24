@@ -362,6 +362,8 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 		return handleCatchPokemonMsg(user, msg, channel)
 	case location.UpdateLocation:
 		return handleUpdateLocationMsg(user, msg, channel)
+	case location.UpdateLocationWithTiles:
+		return handleUpdateLocationWithTilesMsg(msg, channel)
 	default:
 		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
 	}
@@ -492,7 +494,49 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 		return err
 	}
 
+	if changed {
+		var servers []string
+		for server := range tilesPerServer {
+			servers = append(servers, server)
+		}
+
+		channel <- ws.GenericMsg{
+			MsgType: websocket.TextMessage,
+			Data: []byte(location.ServersMessage{
+				Servers: servers,
+			}.SerializeToWSMessage().Serialize()),
+		}
+	}
+
 	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+	channel <- ws.GenericMsg{
+		MsgType: websocket.TextMessage,
+		Data:    []byte(location.TilesPerServerMessage{
+			TilesPerServer: tilesPerServer,
+			OriginServer: myServer,
+		}.SerializeToWSMessage().Serialize()),
+	}
+
+	err = answerToLocationMsg(channel, tilesPerServer, myServer)
+	if err != nil {
+		return wrapHandleLocationMsgs(err)
+	}
+
+	return nil
+}
+
+func handleUpdateLocationWithTilesMsg(msg *ws.Message, channel chan<- ws.GenericMsg) error {
+	desMsg, err := location.DeserializeLocationMsg(msg)
+	if err != nil {
+		return wrapHandleLocationMsgs(err)
+	}
+
+	locationMsg := desMsg.(*location.UpdateLocationWithTilesMessage)
+	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, locationMsg.TilesPerServer, myServer))
+}
+
+func answerToLocationMsg(channel chan<- ws.GenericMsg, tilesPerServer map[string][]int, myServer string) error {
 	myTiles := tilesPerServer[myServer]
 
 	gymsInVicinity := tm.getGymsInTiles(myTiles...)
@@ -506,26 +550,11 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 		Data:    []byte(location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()),
 	}
 
-	// TODO send pokemons with server
 	channel <- ws.GenericMsg{
 		MsgType: websocket.TextMessage,
 		Data: []byte(location.PokemonMessage{
 			Pokemon: pokemonInVicinity,
 		}.SerializeToWSMessage().Serialize()),
-	}
-
-	if changed {
-		var servers []string
-		for server := range tilesPerServer {
-			servers = append(servers, server)
-		}
-
-		channel <- ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data: []byte(location.ConnectToServersMessage{
-				Servers: servers,
-			}.SerializeToWSMessage().Serialize()),
-		}
 	}
 
 	return nil
