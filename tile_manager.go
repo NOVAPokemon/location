@@ -15,7 +15,7 @@ import (
 
 type (
 	gymsFromTileValueType = []utils.GymWithServer
-	activeTileValueType   = *Tile
+	activeTileValueType = *Tile
 	trainerTilesValueType = []int
 )
 
@@ -39,7 +39,6 @@ type TileManager struct {
 type Tile struct {
 	nrTrainerMutex sync.RWMutex
 	nrTrainers     int
-	borderTile     bool
 	pokemons       sync.Map
 	TopLeftCorner  utils.Location
 	BotRightCorner utils.Location
@@ -271,7 +270,6 @@ func (tm *TileManager) UpdateTrainerTiles(trainerId string, location utils.Locat
 			tile := &Tile{
 				nrTrainers:     1,
 				pokemons:       sync.Map{},
-				borderTile:     tm.isBorderTile(topLeft, botRight),
 				BotRightCorner: botRight,
 				TopLeftCorner:  topLeft,
 			}
@@ -502,7 +500,7 @@ func (tm *TileManager) SetGyms(gymWithSrv []utils.GymWithServer) error {
 
 func (tm *TileManager) GetTileBoundsFromTileNr(tileNr int) (topLeft utils.Location, botRight utils.Location) {
 	topLeft = utils.Location{
-		Longitude: (float64(tileNr%tm.numTilesPerAxis))*tm.tileSideLength - 180.0,
+		Longitude: (float64(tileNr % tm.numTilesPerAxis))*tm.tileSideLength - 180.0,
 		Latitude:  180 - float64(tileNr)/float64(tm.numTilesPerAxis)*tm.tileSideLength,
 	}
 
