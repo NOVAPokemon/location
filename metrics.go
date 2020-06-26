@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -71,7 +72,7 @@ func emitTileMetrics() {
 
 		numTrainers := numTrainersValue.(activeTileTrainerNrValueType)
 
-		emitNrConnectedTrainersInTile(tileNr, *numTrainers)
+		emitNrConnectedTrainersInTile(tileNr, atomic.LoadInt32(numTrainers))
 		emitNrPokemonsInTile(tileNr, tile)
 		return true
 	})
