@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -581,13 +582,16 @@ func (tm *TileManager) SetGyms(gymWithSrv []utils.GymWithServer) error {
 func (tm *TileManager) GetTileBoundsFromTileNr(tileNr int) (topLeft utils.Location, botRight utils.Location) {
 	topLeftPoint := r2.Point{
 		X: (float64(tileNr%tm.numTilesPerAxis))*tm.tileSideLength - 180.0,
-		Y: 180 - float64(tileNr)/float64(tm.numTilesPerAxis)*tm.tileSideLength,
+		Y: 180.0 - (float64(tileNr/tm.numTilesPerAxis))*tm.tileSideLength,
 	}
 
 	botRightPoint := r2.Point{
-		X: topLeft.Longitude + tm.tileSideLength,
-		Y: topLeft.Latitude - tm.tileSideLength,
+		X: topLeftPoint.X + tm.tileSideLength,
+		Y: topLeftPoint.Y - tm.tileSideLength,
 	}
+
+	fmt.Println(topLeftPoint)
+	fmt.Println(botRightPoint)
 
 	proj := s2.NewMercatorProjection(180)
 	topLeftLatLng := proj.ToLatLng(topLeftPoint)
@@ -607,10 +611,10 @@ func (tm *TileManager) GetTileBoundsFromTileNr(tileNr int) (topLeft utils.Locati
 }
 
 func (tm *TileManager) GetTileCenterLocationFromTileNr(tileNr int) utils.Location {
-	topLeft, _ := tm.GetTileBoundsFromTileNr(tileNr)
+	topLeft, botRight := tm.GetTileBoundsFromTileNr(tileNr)
 
 	return utils.Location{
-		Latitude:  topLeft.Latitude - (tm.tileSideLength / 2),
-		Longitude: topLeft.Longitude + (tm.tileSideLength / 2),
+		Latitude:  (topLeft.Latitude + botRight.Latitude) / 2,
+		Longitude: (topLeft.Longitude + botRight.Longitude) / 2,
 	}
 }

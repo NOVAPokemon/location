@@ -45,6 +45,10 @@ var (
 )
 
 func init() {
+	if true {
+		return
+	}
+
 	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
 		serviceNameHeadless = aux
 	} else {
@@ -510,7 +514,7 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 		return wrapHandleLocationMsgs(err)
 	}
 
-	log.Infof("received location update from %s at {%f, %f}\n", user, column, row)
+	log.Infof("received location update from %s at {%d, %d}\n", user, column, row)
 
 	exitRect := tm.CalculateBoundaryForLocation(row, column, tm.exitBoundarySize)
 	tm.boundariesLock.RLock()
