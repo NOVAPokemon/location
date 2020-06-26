@@ -482,9 +482,12 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 	}
 
 	exitRect := tm.CalculateBoundaryForLocation(row, column, tm.exitBoundarySize)
+	tm.boundariesLock.RLock()
 	if !exitRect.Intersects(tm.serverRect) {
+		tm.boundariesLock.RUnlock()
 		return wrapHandleLocationMsgs(errors.New("out of bounds of the server"))
 	}
+	tm.boundariesLock.RUnlock()
 
 	currentTiles, changed := tm.UpdateTrainerTiles(user, row, column)
 

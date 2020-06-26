@@ -438,7 +438,11 @@ func (tm *TileManager) isWithinBounds(location utils.Location) bool {
 		Y: float64(col),
 	}
 
-	return tm.serverRect.ContainsPoint(locationPoint)
+	tm.boundariesLock.RLock()
+	contains := tm.serverRect.ContainsPoint(locationPoint)
+	tm.boundariesLock.RUnlock()
+
+	return contains
 }
 
 func (tm *TileManager) logTileManagerState() {
