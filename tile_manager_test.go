@@ -115,7 +115,7 @@ var (
 )
 
 func TestTileManager_NEW_GetTileNrFromLocation(t *testing.T) {
-	_, row, col, err := tm1.GetTileNrFromLocation(locationInCenter)
+	_, row, col, err := tm1.GetTileNrFromLocation(locationInCenter, false)
 	if err != nil {
 		// t.Fatal(err)
 	}
@@ -138,7 +138,7 @@ func TestTileManager_NEW_GetTileNrFromLocation(t *testing.T) {
 }
 
 func TestTileManager_CalculateTileChanges(t *testing.T) {
-	_, row, col, err := tm1.GetTileNrFromLocation(locationInCenter)
+	_, row, col, err := tm1.GetTileNrFromLocation(locationInCenter, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestTileManager_CalculateTileChanges(t *testing.T) {
 }
 
 func TestTileManager_CheckIntersection(t *testing.T) {
-	_, row, col, err := tm1.GetTileNrFromLocation(locationInCenter)
+	_, row, col, err := tm1.GetTileNrFromLocation(locationInCenter, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,8 +203,8 @@ func TestTileManager_CheckIntersection(t *testing.T) {
 		Longitude: 180.000000,
 	}
 
-	_, rowtl, coltl, _ := tm1.GetTileNrFromLocation(topLeft)
-	_, rowbr, colbr, _ := tm1.GetTileNrFromLocation(botRight)
+	_, rowtl, coltl, _ := tm1.GetTileNrFromLocation(topLeft, false)
+	_, rowbr, colbr, _ := tm1.GetTileNrFromLocation(botRight, true)
 
 	topLeft = utils.Location{
 		Latitude:  float64(rowtl),

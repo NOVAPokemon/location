@@ -425,7 +425,7 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 		return nil
 	}
 
-	pokemonTile, _, _, err := tm.GetTileNrFromLocation(catchPokemonMsg.WildPokemon.Location)
+	pokemonTile, _, _, err := tm.GetTileNrFromLocation(catchPokemonMsg.WildPokemon.Location, false)
 	if err != nil {
 		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
 			Error: wrapCatchWildPokemonError(err).Error(),
@@ -505,7 +505,7 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 
 	locationMsg := desMsg.(*location.UpdateLocationMessage)
 
-	_, row, column, err := tm.GetTileNrFromLocation(locationMsg.Location)
+	_, row, column, err := tm.GetTileNrFromLocation(locationMsg.Location, false)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
 	}
