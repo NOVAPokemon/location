@@ -523,13 +523,23 @@ func (tm *TileManager) SetBoundaries(topLeftCorner, botRightCorner utils.Locatio
 
 	topLeft := r2.Point{
 		X: float64(coltl),
-		Y:  float64(rowtl),
+		Y: float64(rowtl),
 	}
 
 	botRight := r2.Point{
 		X: float64(colbr),
-		Y:  float64(rowbr),
+		Y: float64(rowbr),
 	}
+
+	log.Infof("Loaded boundaries: TopLeft: {%f,%f}(%d, %d),  BotRight: {%f,%f}(%d, %d)",
+		topLeftCorner.Latitude,
+		topLeftCorner.Longitude,
+		topLeft.X,
+		topLeft.Y,
+		botRightCorner.Latitude,
+		botRightCorner.Longitude,
+		botRight.X,
+		botRight.Y)
 
 	tm.boundariesLock.Lock()
 	tm.serverRect = r2.RectFromPoints(topLeft, botRight)

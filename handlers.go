@@ -87,12 +87,12 @@ func init() {
 			log.Infof("Loaded config: %+v", serverConfig)
 
 			topLeft := utils.Location{
-				Latitude: serverConfig.TopLeftCorner.Latitude,
+				Latitude:  serverConfig.TopLeftCorner.Latitude,
 				Longitude: serverConfig.TopLeftCorner.Longitude,
 			}
 
 			botRight := utils.Location{
-				Latitude: serverConfig.BotRightCorner.Latitude,
+				Latitude:  serverConfig.BotRightCorner.Latitude,
 				Longitude: serverConfig.BotRightCorner.Longitude,
 			}
 
@@ -389,11 +389,9 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 		return handleCatchPokemonMsg(user, msg, channel)
 	case location.UpdateLocation:
 		// TODO remove logs
-		log.Infof("received location update from %s\n", user)
 		return handleUpdateLocationMsg(user, msg, channel)
 	case location.UpdateLocationWithTiles:
-		log.Infof("received precomputed location update from %s\n", user)
-		return handleUpdateLocationWithTilesMsg(msg, channel)
+		return handleUpdateLocationWithTilesMsg(user, msg, channel)
 	default:
 		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
 	}
@@ -507,6 +505,9 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 
 	locationMsg := desMsg.(*location.UpdateLocationMessage)
 
+	log.Infof("received location update from %s at {%f, %f}\n", user, locationMsg.Location.Longitude,
+		locationMsg.Location.Latitude)
+
 	_, row, column, err := tm.GetTileNrFromLocation(locationMsg.Location)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
@@ -558,7 +559,7 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 	return nil
 }
 
-func handleUpdateLocationWithTilesMsg(msg *ws.Message, channel chan<- ws.GenericMsg) error {
+func handleUpdateLocationWithTilesMsg(user string, msg *ws.Message, channel chan<- ws.GenericMsg) error {
 	desMsg, err := location.DeserializeLocationMsg(msg)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
@@ -566,11 +567,18 @@ func handleUpdateLocationWithTilesMsg(msg *ws.Message, channel chan<- ws.Generic
 
 	locationMsg := desMsg.(*location.UpdateLocationWithTilesMessage)
 	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+
+	log.Infof("received precomputed location update from %s with %v\n", user, locationMsg.TilesPerServer)
+
 	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, locationMsg.TilesPerServer, myServer))
 }
 
 func answerToLocationMsg(channel chan<- ws.GenericMsg, tilesPerServer map[string][]int, myServer string) error {
 	myTiles := tilesPerServer[myServer]
+
+	if len(myTiles) > 0 {
+		return errors.New("user contacted server that isnt responsible for any tile")
+	}
 
 	gymsInVicinity := tm.getGymsInTiles(myTiles...)
 	pokemonInVicinity, err := tm.getPokemonsInTiles(myTiles...)
