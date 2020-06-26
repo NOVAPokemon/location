@@ -225,7 +225,6 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 	latStr := r.FormValue(api.LatitudeQueryParam)
 	lonStr := r.FormValue(api.LongitudeQueryParam)
 
-	log.Infof("Request to determine location for Lat: %s Lon: %s", latStr, lonStr)
 	lat, err := strconv.ParseFloat(latStr, 32)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusBadRequest)
@@ -248,6 +247,8 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 		utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
 		return
 	}
+
+	log.Infof("Request to determine location for Lat: %s Lon: %s | answered: %v", latStr, lonStr, servers)
 
 	if len(servers) == 0 {
 		utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(
