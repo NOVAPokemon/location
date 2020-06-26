@@ -21,6 +21,7 @@ import (
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/location"
+	"github.com/golang/geo/r2"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
@@ -45,6 +46,10 @@ var (
 )
 
 func init() {
+	if true {
+		return
+	}
+
 	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
 		serviceNameHeadless = aux
 	} else {
@@ -85,8 +90,18 @@ func init() {
 			}
 
 			log.Infof("Loaded config: %+v", serverConfig)
-			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile, config.NumberOfPokemonsToGenerate,
-				serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
+
+			topLeftPoint := r2.Point{
+				X: serverConfig.TopLeftCorner.Longitude,
+				Y: serverConfig.TopLeftCorner.Latitude,
+			}
+
+			botRightPoint := r2.Point{
+				X: serverConfig.BotRightCorner.Longitude,
+				Y: serverConfig.BotRightCorner.Latitude,
+			}
+			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile,
+				config.NumberOfPokemonsToGenerate, topLeftPoint, botRightPoint)
 			go RefreshBoundariesPeriodic()
 			go refreshGymsPeriodic()
 			return
@@ -138,11 +153,20 @@ func RefreshBoundariesPeriodic() {
 			log.Error(err)
 		} else {
 			log.Infof("Loaded boundaries: TopLeft: {%f,%f},  BotRight: {%f,%f}",
-				serverConfig.BotRightCorner.Latitude,
-				serverConfig.BotRightCorner.Longitude,
+				serverConfig.TopLeftCorner.Latitude,
+				serverConfig.TopLeftCorner.Longitude,
 				serverConfig.BotRightCorner.Latitude,
 				serverConfig.BotRightCorner.Longitude)
-			tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
+			topLeftPoint := r2.Point{
+				X: serverConfig.TopLeftCorner.Longitude,
+				Y: serverConfig.TopLeftCorner.Latitude,
+			}
+
+			botRightPoint := r2.Point{
+				X: serverConfig.BotRightCorner.Longitude,
+				Y: serverConfig.BotRightCorner.Latitude,
+			}
+			tm.SetBoundaries(topLeftPoint, botRightPoint)
 		}
 	}
 }
@@ -266,11 +290,11 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
-	defer func() {
-		if err := conn.Close(); err != nil {
-			log.Error(err)
-		}
-	}()
+	inChan := make(chan *ws.Message)
+	outChan := make(chan ws.GenericMsg)
+	finish := make(chan struct{})
+
+	clientChannels.Store(user, outChan)
 
 	_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 	conn.SetPongHandler(func(string) error {
@@ -278,14 +302,6 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 		_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		return nil
 	})
-
-	inChan := make(chan *ws.Message)
-	outChan := make(chan ws.GenericMsg)
-	finish := make(chan struct{})
-
-	clientChannels.Store(user, outChan)
-	defer clientChannels.Delete(user)
-
 	doneReceive := handleMessagesLoop(conn, inChan, finish)
 	doneSend := handleWriteLoop(conn, outChan, finish)
 	defer func() {
@@ -303,6 +319,8 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 		close(outChan)
 		close(inChan)
+
+		clientChannels.Delete(user)
 	}()
 
 	var pingTicker = time.NewTicker(time.Duration(config.Ping) * time.Second)
@@ -388,8 +406,11 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 	case location.CatchPokemon:
 		return handleCatchPokemonMsg(user, msg, channel)
 	case location.UpdateLocation:
+		// TODO remove logs
+		log.Infof("received location update from %s\n", user)
 		return handleUpdateLocationMsg(user, msg, channel)
 	case location.UpdateLocationWithTiles:
+		log.Infof("received precomputed location update from %s\n", user)
 		return handleUpdateLocationWithTilesMsg(msg, channel)
 	default:
 		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
@@ -631,7 +652,16 @@ func getServersForLocations(locations ...utils.Location) ([]string, error) {
 }
 
 func setServerRegionConfig(serverConfig *utils.LocationServerBoundary) {
-	tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
+	topLeftPoint := r2.Point{
+		X: serverConfig.TopLeftCorner.Longitude,
+		Y: serverConfig.TopLeftCorner.Latitude,
+	}
+
+	botRightPoint := r2.Point{
+		X: serverConfig.BotRightCorner.Longitude,
+		Y: serverConfig.BotRightCorner.Latitude,
+	}
+	tm.SetBoundaries(topLeftPoint, botRightPoint)
 }
 
 func HandleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {

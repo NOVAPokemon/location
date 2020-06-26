@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/NOVAPokemon/utils"
+	locationUtils "github.com/NOVAPokemon/utils/location"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -93,10 +94,10 @@ func TestTileManager_GetTileNrFromLocation(t *testing.T) {
 }*/
 
 var (
-	numTiles = 100
+	numTiles        = 100
 	numTilesPerAxis = int(math.Sqrt(float64(numTiles)))
-	tileSide = 360.0 / float64(numTilesPerAxis)
-	tm1 = &TileManager{
+	tileSide        = 360.0 / float64(numTilesPerAxis)
+	tm1             = &TileManager{
 		numTilesInWorld:          numTiles,
 		activeTiles:              sync.Map{},
 		trainerTiles:             sync.Map{},
@@ -181,6 +182,48 @@ func TestTileManager_CalculateTileChanges(t *testing.T) {
 	assert.Contains(t, curr, 65)
 	assert.Contains(t, curr, 66)
 	assert.Equal(t, len(curr), 9)
+}
+
+func TestTileManager_CheckIntersection(t *testing.T) {
+	_, row, col, err := tm1.GetTileNrFromLocation(locationInCenter)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	topLeft := utils.Location{
+		Latitude:  0.,
+		Longitude: 0.,
+	}
+
+	botRight := utils.Location{
+		Latitude:  -85.051150,
+		Longitude: 180.000000,
+	}
+
+	_, rowtl, coltl, _ := tm1.GetTileNrFromLocation(topLeft)
+	_, rowbr, colbr, _ := tm1.GetTileNrFromLocation(botRight)
+
+	topLeft = utils.Location{
+		Latitude:  float64(rowtl),
+		Longitude: float64(coltl),
+	}
+
+	botRight = utils.Location{
+		Latitude:  float64(rowbr),
+		Longitude: float64(colbr),
+	}
+
+	tm1.exitBoundarySize = 1
+	tm1.serverRect = locationUtils.LocationsToRect(topLeft, botRight)
+	exitRect := tm1.CalculateBoundaryForLocation(row, col, tm1.exitBoundarySize)
+	tm1.boundariesLock.RLock()
+	if !exitRect.Intersects(tm1.serverRect) {
+		tm1.boundariesLock.RUnlock()
+		fmt.Printf("[%f, %f] [%f, %f]\n", exitRect.X.Lo, exitRect.Y.Lo, exitRect.X.Hi, exitRect.Y.Hi)
+		fmt.Printf("[%f, %f] [%f, %f]\n", tm1.serverRect.X.Lo, tm1.serverRect.Y.Lo, tm1.serverRect.X.Hi, tm1.serverRect.Y.Hi)
+		t.Fatal("out of bounds of the server")
+	}
+	tm1.boundariesLock.RUnlock()
 }
 
 /*func TestTileManager_GetTileBoundsFromTileNr(t *testing.T) {

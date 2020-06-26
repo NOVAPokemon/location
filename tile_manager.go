@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/NOVAPokemon/utils"
-	locationUtils "github.com/NOVAPokemon/utils/location"
 	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/golang/geo/r2"
 	"github.com/golang/geo/s2"
@@ -49,11 +48,11 @@ type Tile struct {
 const LatitudeMax = 85.05115
 
 func NewTileManager(gyms []utils.GymWithServer, numTiles, maxPokemonsPerTile, pokemonsPerGeneration int,
-	topLeft utils.Location, botRight utils.Location) *TileManager {
+	topLeft, botRight r2.Point) *TileManager {
 
 	numTilesPerAxis := int(math.Sqrt(float64(numTiles)))
 	tileSide := 360.0 / float64(numTilesPerAxis)
-	serverRect := locationUtils.LocationsToRect(topLeft, botRight)
+	serverRect := r2.RectFromPoints(topLeft, botRight)
 
 	toReturn := &TileManager{
 		numTilesInWorld:          numTiles,
@@ -503,10 +502,10 @@ func (tm *TileManager) AddGym(gymWithSrv utils.GymWithServer) error {
 	return nil
 }
 
-func (tm *TileManager) SetBoundaries(topLeftCorner utils.Location, botRightCorner utils.Location) {
+func (tm *TileManager) SetBoundaries(topLeftCorner, botRightCorner r2.Point) {
 	// TODO what to do to clients who become out of region
 	tm.boundariesLock.Lock()
-	tm.serverRect = locationUtils.LocationsToRect(topLeftCorner, botRightCorner)
+	tm.serverRect = r2.RectFromPoints(topLeftCorner, botRightCorner)
 	tm.boundariesLock.Unlock()
 
 }
