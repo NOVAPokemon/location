@@ -48,11 +48,10 @@ type Tile struct {
 const LatitudeMax = 85.05115
 
 func NewTileManager(gyms []utils.GymWithServer, numTiles, maxPokemonsPerTile, pokemonsPerGeneration int,
-	topLeft, botRight r2.Point) *TileManager {
+	topLeft, botRight utils.Location) *TileManager {
 
 	numTilesPerAxis := int(math.Sqrt(float64(numTiles)))
 	tileSide := 360.0 / float64(numTilesPerAxis)
-	serverRect := r2.RectFromPoints(topLeft, botRight)
 
 	toReturn := &TileManager{
 		numTilesInWorld:          numTiles,
@@ -63,9 +62,23 @@ func NewTileManager(gyms []utils.GymWithServer, numTiles, maxPokemonsPerTile, po
 		maxPokemonsPerTile:       maxPokemonsPerTile,
 		maxPokemonsPerGeneration: pokemonsPerGeneration,
 		activateTileLock:         sync.Mutex{},
-		serverRect:               serverRect,
 		activeTileTrainerNumber:  sync.Map{},
 	}
+
+	_, rowtl, coltl, _ := toReturn.GetTileNrFromLocation(topLeft)
+	_, rowbr, colbr, _ := toReturn.GetTileNrFromLocation(botRight)
+
+	topLeftPoint := r2.Point{
+		X: float64(coltl),
+		Y: float64(rowtl),
+	}
+
+	botRightPoint := r2.Point{
+		X: float64(colbr),
+		Y: float64(rowbr),
+	}
+
+	toReturn.serverRect = r2.RectFromPoints(topLeftPoint, botRightPoint)
 
 	toReturn.LoadGyms(gyms)
 	go toReturn.logActiveGymsPeriodic()

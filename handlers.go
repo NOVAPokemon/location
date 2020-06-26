@@ -21,7 +21,6 @@ import (
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/location"
-	"github.com/golang/geo/r2"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
@@ -87,17 +86,14 @@ func init() {
 
 			log.Infof("Loaded config: %+v", serverConfig)
 
-			_, rowtl, coltl, _ := tm.GetTileNrFromLocation(serverConfig.TopLeftCorner)
-			_, rowbr, colbr, _ := tm.GetTileNrFromLocation(serverConfig.BotRightCorner)
-
-			topLeft := r2.Point{
-				X: float64(coltl),
-				Y: float64(rowtl),
+			topLeft := utils.Location{
+				Latitude: serverConfig.TopLeftCorner.Latitude,
+				Longitude: serverConfig.TopLeftCorner.Longitude,
 			}
 
-			botRight := r2.Point{
-				X: float64(colbr),
-				Y: float64(rowbr),
+			botRight := utils.Location{
+				Latitude: serverConfig.BotRightCorner.Latitude,
+				Longitude: serverConfig.BotRightCorner.Longitude,
 			}
 
 			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile,
