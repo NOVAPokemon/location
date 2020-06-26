@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"math"
 	"sync"
 	"testing"
@@ -91,11 +92,11 @@ func TestTileManager_GetTileNrFromLocation(t *testing.T) {
 	}
 }*/
 
-func TestTileManager_NEW_GetTileNrFromLocation(t *testing.T) {
-	numTiles := 100
-	numTilesPerAxis := int(math.Sqrt(float64(numTiles)))
-	tileSide := 360.0 / float64(numTilesPerAxis)
-	tm1 := &TileManager{
+var (
+	numTiles = 100
+	numTilesPerAxis = int(math.Sqrt(float64(numTiles)))
+	tileSide = 360.0 / float64(numTilesPerAxis)
+	tm1 = &TileManager{
 		numTilesInWorld:          numTiles,
 		activeTiles:              sync.Map{},
 		trainerTiles:             sync.Map{},
@@ -106,12 +107,14 @@ func TestTileManager_NEW_GetTileNrFromLocation(t *testing.T) {
 		activateTileLock:         sync.Mutex{},
 	}
 
-	locationInTile0 := utils.Location{
+	locationInCenter = utils.Location{
 		Latitude:  0,
 		Longitude: 0,
 	}
+)
 
-	_, row, col, err := tm.GetTileNrFromLocation(locationInTile0)
+func TestTileManager_NEW_GetTileNrFromLocation(t *testing.T) {
+	_, row, col, err := tm1.GetTileNrFromLocation(locationInCenter)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,9 +123,64 @@ func TestTileManager_NEW_GetTileNrFromLocation(t *testing.T) {
 
 	assert.Contains(t, tileNrs, 44)
 	assert.Contains(t, tileNrs, 45)
+	assert.Contains(t, tileNrs, 46)
 	assert.Contains(t, tileNrs, 54)
+	assert.Contains(t, tileNrs, 55)
 	assert.Contains(t, tileNrs, 56)
-	assert.Equal(t, len(tileNrs), 4)
+	assert.Contains(t, tileNrs, 64)
+	assert.Contains(t, tileNrs, 65)
+	assert.Contains(t, tileNrs, 66)
+	assert.Equal(t, len(tileNrs), 9)
+}
+
+func TestTileManager_CalculateTileChanges(t *testing.T) {
+	_, row, col, err := tm1.GetTileNrFromLocation(locationInCenter)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	trainerId := "teste"
+	tm1.trainerTiles.Store(trainerId, []int{0, 1, 2, 10, 11, 12, 20, 21, 22})
+	tm1.exitBoundarySize = 2
+	tm1.entryBoundarySize = 1
+	toRemove, toAdd, curr := tm1.calculateLocationTileChanges(trainerId, row, col)
+
+	fmt.Println(toRemove)
+	fmt.Println(toAdd)
+	fmt.Println(curr)
+
+	assert.Contains(t, toRemove, 0)
+	assert.Contains(t, toRemove, 1)
+	assert.Contains(t, toRemove, 2)
+	assert.Contains(t, toRemove, 10)
+	assert.Contains(t, toRemove, 11)
+	assert.Contains(t, toRemove, 12)
+	assert.Contains(t, toRemove, 20)
+	assert.Contains(t, toRemove, 21)
+	assert.Contains(t, toRemove, 22)
+	assert.Equal(t, len(toRemove), 9)
+
+	assert.Contains(t, toAdd, 44)
+	assert.Contains(t, toAdd, 45)
+	assert.Contains(t, toAdd, 46)
+	assert.Contains(t, toAdd, 54)
+	assert.Contains(t, toAdd, 55)
+	assert.Contains(t, toAdd, 56)
+	assert.Contains(t, toAdd, 64)
+	assert.Contains(t, toAdd, 65)
+	assert.Contains(t, toAdd, 66)
+	assert.Equal(t, len(toAdd), 9)
+
+	assert.Contains(t, curr, 44)
+	assert.Contains(t, curr, 45)
+	assert.Contains(t, curr, 46)
+	assert.Contains(t, curr, 54)
+	assert.Contains(t, curr, 55)
+	assert.Contains(t, curr, 56)
+	assert.Contains(t, curr, 64)
+	assert.Contains(t, curr, 65)
+	assert.Contains(t, curr, 66)
+	assert.Equal(t, len(curr), 9)
 }
 
 /*func TestTileManager_GetTileBoundsFromTileNr(t *testing.T) {

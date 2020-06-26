@@ -324,11 +324,13 @@ func (tm *TileManager) calculateLocationTileChanges(trainerId string, row, colum
 	}
 
 	tileNrs := tileNrsValue.(trainerTilesValueType)
+
 	for i := range tileNrs {
 		remove := true
 		for j := range exitTileNrs {
 			if tileNrs[i] == exitTileNrs[j] {
 				remove = false
+				currentTiles = append(currentTiles, tileNrs[i])
 				break
 			}
 		}
@@ -350,10 +352,11 @@ func (tm *TileManager) calculateLocationTileChanges(trainerId string, row, colum
 
 		if add {
 			toAdd = append(toAdd, entryTileNrs[i])
+			currentTiles = append(currentTiles, entryTileNrs[i])
 		}
 	}
 
-	return toRemove, toAdd, exitTileNrs
+	return toRemove, toAdd, currentTiles
 }
 
 func (tm *TileManager) getBoundaryTiles(row, column int, boundarySize int) []int {
@@ -364,12 +367,11 @@ func (tm *TileManager) getBoundaryTiles(row, column int, boundarySize int) []int
 
 	minI := int(boundaryRect.Y.Lo)
 	minJ := int(boundaryRect.X.Lo)
-	maxI := int(boundaryRect.Y.Hi)
 	maxJ := int(boundaryRect.X.Hi)
-	rectSide := maxJ - minJ
+	rectSide := maxJ - minJ + 1
 
-	for i := minI; i <= maxI; i++ {
-		for j := minJ; j <= maxJ; j++ {
+	for i := 0; i < rectSide; i++ {
+		for j := 0; j < rectSide; j++ {
 			iAdjusted := (minI + i) % tm.numTilesPerAxis
 			jAdjusted := (minJ + j) % tm.numTilesPerAxis
 			tileNrs[j+i*rectSide] = iAdjusted + jAdjusted*tm.numTilesPerAxis

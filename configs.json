@@ -20,6 +20,6 @@
     "Latitude": -90.0,
     "Longitude": 180.0
   },
-  "entry_boundary_size": 1.25,
-  "exit_boundary_size": 2.75
+  "entry_boundary_size": 1,
+  "exit_boundary_size": 2
 }

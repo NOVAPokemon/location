@@ -27,6 +27,6 @@ type LocationServerConfig struct {
 	TopLeftCorner      utils.Location `json:"topLeftCorner"`
 	BotRightCorner     utils.Location `json:"botRightCorner"`
 
-	EntryBoundarySize float64 `json:"entry_boundary_size"`
-	ExitBoundarySize  float64 `json:"exit_boundary_size"`
+	EntryBoundarySize int `json:"entry_boundary_size"`
+	ExitBoundarySize  int `json:"exit_boundary_size"`
 }
