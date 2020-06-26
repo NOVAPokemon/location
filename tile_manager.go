@@ -236,7 +236,7 @@ func (tm *TileManager) GetTileNrFromLocation(location utils.Location) (int, int,
 	if location.Latitude > LatitudeMax || location.Latitude < -LatitudeMax {
 		return -1, -1, -1, errors.New("latitude value out of bounds, bound is: -[85.05115 : 85.05115]")
 	}
-	if location.Longitude > 179.9 || location.Longitude < -179.9 {
+	if location.Longitude > 180 || location.Longitude < -180 {
 		return -1, -1, -1, errors.New("latitude value out of bounds, bound is: [-179.9 : 179.9]")
 	}
 
@@ -248,6 +248,19 @@ func (tm *TileManager) GetTileNrFromLocation(location utils.Location) (int, int,
 	// translates top left corner to 0,0 and flips to maintain order
 	tileCol := int(math.Floor((180 + transformedPoint.X) / tm.tileSideLength))
 	tileRow := int(math.Floor((180 - transformedPoint.Y) / tm.tileSideLength))
+
+	if tileCol > tm.numTilesPerAxis-1 {
+		tileCol = tm.numTilesPerAxis - 1
+	} else if tileCol < 0 {
+		tileCol = 0
+	}
+
+	if tileRow > tm.numTilesPerAxis-1 {
+		tileRow = tm.numTilesPerAxis - 1
+	} else if tileRow < 0 {
+		tileRow = 0
+	}
+
 	tileNr := tileRow*tm.numTilesPerAxis + tileCol
 	return tileNr, tileRow, tileCol, nil
 }
@@ -531,7 +544,7 @@ func (tm *TileManager) SetBoundaries(topLeftCorner, botRightCorner utils.Locatio
 		Y: float64(rowbr),
 	}
 
-	log.Infof("Loaded boundaries: TopLeft: {%f,%f}(%d, %d),  BotRight: {%f,%f}(%d, %d)",
+	log.Infof("Loaded boundaries: TopLeft: {%f,%f}(%f, %f),  BotRight: {%f,%f}(%f, %f)",
 		topLeftCorner.Latitude,
 		topLeftCorner.Longitude,
 		topLeft.X,
