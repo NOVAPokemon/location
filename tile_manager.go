@@ -249,21 +249,15 @@ func (tm *TileManager) GetTileNrFromLocation(location utils.Location, exclusive 
 	tileCol := int(math.Floor((180 + transformedPoint.X) / tm.tileSideLength))
 	tileRow := int(math.Floor((180 - transformedPoint.Y) / tm.tileSideLength))
 
-	if tileCol > tm.numTilesPerAxis-1 {
-		tileCol = tm.numTilesPerAxis - 1
-	} else if tileCol < 0 {
-		tileCol = 0
-	}
-
-	if tileRow > tm.numTilesPerAxis-1 {
-		tileRow = tm.numTilesPerAxis - 1
-	} else if tileRow < 0 {
-		tileRow = 0
-	}
-
 	if exclusive {
 		tileCol--
 		tileRow--
+	} else {
+		if tileCol > tm.numTilesPerAxis-1 {
+			tileCol = tm.numTilesPerAxis - 1
+		} else if tileCol < 0 {
+			tileCol = 0
+		}
 	}
 
 	tileNr := tileRow*tm.numTilesPerAxis + tileCol
