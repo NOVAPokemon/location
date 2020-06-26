@@ -45,10 +45,6 @@ var (
 )
 
 func init() {
-	if true {
-		return
-	}
-
 	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
 		serviceNameHeadless = aux
 	} else {
