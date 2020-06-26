@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -589,9 +588,6 @@ func (tm *TileManager) GetTileBoundsFromTileNr(tileNr int) (topLeft utils.Locati
 		X: topLeftPoint.X + tm.tileSideLength,
 		Y: topLeftPoint.Y - tm.tileSideLength,
 	}
-
-	fmt.Println(topLeftPoint)
-	fmt.Println(botRightPoint)
 
 	proj := s2.NewMercatorProjection(180)
 	topLeftLatLng := proj.ToLatLng(topLeftPoint)
