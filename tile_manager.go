@@ -272,7 +272,7 @@ func (tm *TileManager) UpdateTrainerTiles(trainerId string, row, column int) ([]
 
 			_, ok = tm.activeTiles.Load(toAdd[i])
 			if ok {
-				trainerNrsValue, ok := tm.activeTileTrainerNumber.Load(toRemove)
+				trainerNrsValue, ok := tm.activeTileTrainerNumber.Load(toRemove[i])
 				if !ok {
 					panic("existing tile did not have a trainers counter")
 				}
@@ -290,7 +290,7 @@ func (tm *TileManager) UpdateTrainerTiles(trainerId string, row, column int) ([]
 				BotRightCorner: botRight,
 				TopLeftCorner:  topLeft,
 			}
-			numTrainers := 1
+			var numTrainers int32 = 1
 			tm.activeTileTrainerNumber.Store(toAdd[i], &numTrainers)
 			tm.activeTiles.Store(toAdd[i], tile)
 			go tm.generateWildPokemonsForZonePeriodically(toAdd[i])
@@ -299,7 +299,7 @@ func (tm *TileManager) UpdateTrainerTiles(trainerId string, row, column int) ([]
 			continue
 		} else {
 
-			trainerNrsValue, ok := tm.activeTileTrainerNumber.Load(toRemove)
+			trainerNrsValue, ok := tm.activeTileTrainerNumber.Load(toRemove[i])
 			if !ok {
 				log.Warn("existing tile did not have a trainers counter")
 				continue
