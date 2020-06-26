@@ -502,10 +502,24 @@ func (tm *TileManager) AddGym(gymWithSrv utils.GymWithServer) error {
 	return nil
 }
 
-func (tm *TileManager) SetBoundaries(topLeftCorner, botRightCorner r2.Point) {
+func (tm *TileManager) SetBoundaries(topLeftCorner, botRightCorner utils.Location) {
 	// TODO what to do to clients who become out of region
+
+	_, rowtl, coltl, _ := tm.GetTileNrFromLocation(topLeftCorner)
+	_, rowbr, colbr, _ := tm.GetTileNrFromLocation(botRightCorner)
+
+	topLeft := r2.Point{
+		X: float64(coltl),
+		Y:  float64(rowtl),
+	}
+
+	botRight := r2.Point{
+		X: float64(colbr),
+		Y:  float64(rowbr),
+	}
+
 	tm.boundariesLock.Lock()
-	tm.serverRect = r2.RectFromPoints(topLeftCorner, botRightCorner)
+	tm.serverRect = r2.RectFromPoints(topLeft, botRight)
 	tm.boundariesLock.Unlock()
 
 }

@@ -87,17 +87,21 @@ func init() {
 
 			log.Infof("Loaded config: %+v", serverConfig)
 
-			topLeftPoint := r2.Point{
-				X: serverConfig.TopLeftCorner.Longitude,
-				Y: serverConfig.TopLeftCorner.Latitude,
+			_, rowtl, coltl, _ := tm.GetTileNrFromLocation(serverConfig.TopLeftCorner)
+			_, rowbr, colbr, _ := tm.GetTileNrFromLocation(serverConfig.BotRightCorner)
+
+			topLeft := r2.Point{
+				X: float64(coltl),
+				Y: float64(rowtl),
 			}
 
-			botRightPoint := r2.Point{
-				X: serverConfig.BotRightCorner.Longitude,
-				Y: serverConfig.BotRightCorner.Latitude,
+			botRight := r2.Point{
+				X: float64(colbr),
+				Y: float64(rowbr),
 			}
+
 			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile,
-				config.NumberOfPokemonsToGenerate, topLeftPoint, botRightPoint)
+				config.NumberOfPokemonsToGenerate, topLeft, botRight)
 			go RefreshBoundariesPeriodic()
 			go refreshGymsPeriodic()
 			return
@@ -148,21 +152,7 @@ func RefreshBoundariesPeriodic() {
 		if err != nil {
 			log.Error(err)
 		} else {
-			log.Infof("Loaded boundaries: TopLeft: {%f,%f},  BotRight: {%f,%f}",
-				serverConfig.TopLeftCorner.Latitude,
-				serverConfig.TopLeftCorner.Longitude,
-				serverConfig.BotRightCorner.Latitude,
-				serverConfig.BotRightCorner.Longitude)
-			topLeftPoint := r2.Point{
-				X: serverConfig.TopLeftCorner.Longitude,
-				Y: serverConfig.TopLeftCorner.Latitude,
-			}
-
-			botRightPoint := r2.Point{
-				X: serverConfig.BotRightCorner.Longitude,
-				Y: serverConfig.BotRightCorner.Latitude,
-			}
-			tm.SetBoundaries(topLeftPoint, botRightPoint)
+			tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
 		}
 	}
 }
@@ -220,7 +210,7 @@ func HandleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 		utils.LogAndSendHTTPError(&w, wrapSetServerConfigsError(err), http.StatusInternalServerError)
 		return
 	}
-	setServerRegionConfig(config)
+	tm.SetBoundaries(config.TopLeftCorner, config.BotRightCorner)
 }
 
 func HandleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
@@ -647,23 +637,10 @@ func getServersForLocations(locations ...utils.Location) ([]string, error) {
 	return servers, nil
 }
 
-func setServerRegionConfig(serverConfig *utils.LocationServerBoundary) {
-	topLeftPoint := r2.Point{
-		X: serverConfig.TopLeftCorner.Longitude,
-		Y: serverConfig.TopLeftCorner.Latitude,
-	}
-
-	botRightPoint := r2.Point{
-		X: serverConfig.BotRightCorner.Longitude,
-		Y: serverConfig.BotRightCorner.Latitude,
-	}
-	tm.SetBoundaries(topLeftPoint, botRightPoint)
-}
-
 func HandleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
 	serverConfig, err := locationdb.GetServerConfig(serverName)
 	if err != nil {
 		log.Fatal(err)
 	}
-	setServerRegionConfig(serverConfig)
+	tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
 }
