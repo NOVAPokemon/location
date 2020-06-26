@@ -505,13 +505,12 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 
 	locationMsg := desMsg.(*location.UpdateLocationMessage)
 
-	log.Infof("received location update from %s at {%f, %f}\n", user, locationMsg.Location.Longitude,
-		locationMsg.Location.Latitude)
-
 	_, row, column, err := tm.GetTileNrFromLocation(locationMsg.Location)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
 	}
+
+	log.Infof("received location update from %s at {%f, %f}\n", user, column, row)
 
 	exitRect := tm.CalculateBoundaryForLocation(row, column, tm.exitBoundarySize)
 	tm.boundariesLock.RLock()

@@ -408,13 +408,13 @@ func (tm *TileManager) getBoundaryTiles(row, column int, boundarySize int) []int
 
 func (tm *TileManager) CalculateBoundaryForLocation(row, column int, boundarySize int) r2.Rect {
 	topLeft := r2.Point{
-		X: float64(row - boundarySize),
-		Y: float64(column - boundarySize),
+		X: float64(column - boundarySize),
+		Y: float64(row - boundarySize),
 	}
 
 	botRight := r2.Point{
-		X: float64(row + boundarySize),
-		Y: float64(column + boundarySize),
+		X: float64(column + boundarySize),
+		Y: float64(row + boundarySize),
 	}
 
 	return r2.RectFromPoints(topLeft, botRight)
@@ -545,12 +545,12 @@ func (tm *TileManager) SetBoundaries(topLeftCorner, botRightCorner utils.Locatio
 	}
 
 	log.Infof("Loaded boundaries: TopLeft: {%f,%f}(%f, %f),  BotRight: {%f,%f}(%f, %f)",
-		topLeftCorner.Latitude,
 		topLeftCorner.Longitude,
+		topLeftCorner.Latitude,
 		topLeft.X,
 		topLeft.Y,
-		botRightCorner.Latitude,
 		botRightCorner.Longitude,
+		botRightCorner.Latitude,
 		botRight.X,
 		botRight.Y)
 
