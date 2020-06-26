@@ -253,6 +253,12 @@ func (tm *TileManager) GetTileNrFromLocation(location utils.Location, exclusive 
 		tileCol--
 		tileRow--
 	} else {
+		if tileRow > tm.numTilesPerAxis-1 {
+			tileRow = tm.numTilesPerAxis - 1
+		} else if tileRow < 0 {
+			tileRow = 0
+		}
+
 		if tileCol > tm.numTilesPerAxis-1 {
 			tileCol = tm.numTilesPerAxis - 1
 		} else if tileCol < 0 {
