@@ -1,14 +1,15 @@
 package main
 
 import (
-	"fmt"
-	"os"
+	"math"
+	"sync"
 	"testing"
 
 	"github.com/NOVAPokemon/utils"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestMain(m *testing.M) {
+/*func TestMain(m *testing.M) {
 	res := m.Run()
 	os.Exit(res)
 }
@@ -88,9 +89,43 @@ func TestTileManager_GetTileNrFromLocation(t *testing.T) {
 		t.Error(fmt.Sprintf("Location %+v should be in tile 3, was: %d", locationInTile3, tileNr))
 		t.Fail()
 	}
+}*/
+
+func TestTileManager_NEW_GetTileNrFromLocation(t *testing.T) {
+	numTiles := 100
+	numTilesPerAxis := int(math.Sqrt(float64(numTiles)))
+	tileSide := 360.0 / float64(numTilesPerAxis)
+	tm1 := &TileManager{
+		numTilesInWorld:          numTiles,
+		activeTiles:              sync.Map{},
+		trainerTiles:             sync.Map{},
+		numTilesPerAxis:          numTilesPerAxis,
+		tileSideLength:           tileSide,
+		maxPokemonsPerTile:       100,
+		maxPokemonsPerGeneration: 10,
+		activateTileLock:         sync.Mutex{},
+	}
+
+	locationInTile0 := utils.Location{
+		Latitude:  0,
+		Longitude: 0,
+	}
+
+	_, row, col, err := tm.GetTileNrFromLocation(locationInTile0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tileNrs := tm1.getBoundaryTiles(row, col, 1)
+
+	assert.Contains(t, tileNrs, 44)
+	assert.Contains(t, tileNrs, 45)
+	assert.Contains(t, tileNrs, 54)
+	assert.Contains(t, tileNrs, 56)
+	assert.Equal(t, len(tileNrs), 4)
 }
 
-func TestTileManager_GetTileBoundsFromTileNr(t *testing.T) {
+/*func TestTileManager_GetTileBoundsFromTileNr(t *testing.T) {
 
 	var (
 		rm = NewTileManager(nil, 4, 100, 10,
@@ -186,4 +221,4 @@ func TestTileManager_GetTileBoundsFromTileNr(t *testing.T) {
 		t.Fail()
 	}
 
-}
+}*/

@@ -45,7 +45,6 @@ var (
 )
 
 func init() {
-
 	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
 		serviceNameHeadless = aux
 	} else {
@@ -477,17 +476,17 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 
 	locationMsg := desMsg.(*location.UpdateLocationMessage)
 
-	boundary := tm.CalculateBoundaryForLocation(locationMsg.Location, tm.exitBoundarySize)
-	exitRect := locationUtils.BoundaryToRect(boundary)
-	serverBoundsRect := locationUtils.BoundaryToRect(tm.boundary)
-	if !exitRect.Intersects(serverBoundsRect) {
-		return errors.New("out of bounds of the server")
+	_, row, column, err := tm.GetTileNrFromLocation(locationMsg.Location)
+	if err != nil {
+		return wrapHandleLocationMsgs(err)
 	}
 
-	currentTiles, changed, err := tm.UpdateTrainerTiles(user, locationMsg.Location)
-	if err != nil {
-		return err
+	exitRect := tm.CalculateBoundaryForLocation(row, column, tm.exitBoundarySize)
+	if !exitRect.Intersects(tm.serverRect) {
+		return wrapHandleLocationMsgs(errors.New("out of bounds of the server"))
 	}
+
+	currentTiles, changed := tm.UpdateTrainerTiles(user, row, column)
 
 	tilesPerServer, err := getServersForTiles(currentTiles...)
 	if err != nil {
@@ -511,9 +510,9 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
 	channel <- ws.GenericMsg{
 		MsgType: websocket.TextMessage,
-		Data:    []byte(location.TilesPerServerMessage{
+		Data: []byte(location.TilesPerServerMessage{
 			TilesPerServer: tilesPerServer,
-			OriginServer: myServer,
+			OriginServer:   myServer,
 		}.SerializeToWSMessage().Serialize()),
 	}
 

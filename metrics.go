@@ -25,7 +25,7 @@ func emitNrConnectedClients() {
 	connectedClients.Set(float64(counter))
 }
 
-func emitNrConnectedTrainersInTile(tileNr int, tile Tile) {
+func emitNrConnectedTrainersInTile(tileNr int, numTrainers int32) {
 	name := fmt.Sprintf("location_tile_%d_connected_clients", tileNr)
 	gauge, ok := tileMetrics[name]
 	if !ok {
@@ -35,10 +35,11 @@ func emitNrConnectedTrainersInTile(tileNr int, tile Tile) {
 		})
 		tileMetrics[name] = gauge
 	}
-	gauge.Set(float64(tile.nrTrainers))
+
+	gauge.Set(float64(numTrainers))
 }
 
-func emitNrPokemonsInTile(tileNr int, tile Tile) {
+func emitNrPokemonsInTile(tileNr int, tile *Tile) {
 	name := fmt.Sprintf("location_tile_%d_wild_pokemons", tileNr)
 	gauge, ok := tileMetrics[name]
 	if !ok {
@@ -48,14 +49,29 @@ func emitNrPokemonsInTile(tileNr int, tile Tile) {
 		})
 		tileMetrics[name] = gauge
 	}
-	gauge.Set(float64(tile.nrTrainers))
+
+	numPokemons := 0
+	tile.pokemons.Range(func(_, _ interface{}) bool {
+		numPokemons++
+		return true
+	})
+
+	gauge.Set(float64(numPokemons))
 }
 
 func emitTileMetrics() {
 	tm.activeTiles.Range(func(key, value interface{}) bool {
 		tileNr := key.(int)
-		tile := value.(Tile)
-		emitNrConnectedTrainersInTile(tileNr, tile)
+		tile := value.(activeTileValueType)
+
+		numTrainersValue, ok := tm.activeTileTrainerNumber.Load(tileNr)
+		if !ok {
+			return true
+		}
+
+		numTrainers := numTrainersValue.(activeTileTrainerNrValueType)
+
+		emitNrConnectedTrainersInTile(tileNr, *numTrainers)
 		emitNrPokemonsInTile(tileNr, tile)
 		return true
 	})
