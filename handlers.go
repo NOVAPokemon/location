@@ -286,12 +286,23 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	clientChannels.Store(user, outChan)
 	defer clientChannels.Delete(user)
 
-	go handleMessagesLoop(conn, inChan, finish)
-	go handleWriteLoop(conn, outChan, finish)
+	doneReceive := handleMessagesLoop(conn, inChan, finish)
+	doneSend := handleWriteLoop(conn, outChan, finish)
 	defer func() {
 		if err := tm.RemoveTrainerLocation(user); err != nil {
 			log.Error(err)
 		}
+		close(finish)
+
+		if err := conn.Close(); err != nil {
+			log.Error(err)
+		}
+
+		<-doneReceive
+		<-doneSend
+
+		close(outChan)
+		close(inChan)
 	}()
 
 	var pingTicker = time.NewTicker(time.Duration(config.Ping) * time.Second)
@@ -320,33 +331,50 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	}
 }
 
-func handleWriteLoop(conn *websocket.Conn, channel chan ws.GenericMsg, finished chan struct{}) {
-	defer close(channel)
-	for {
-		select {
-		case msg := <-channel:
-			// log.Info("Sending ", msg.MsgType, string(msg.Data))
-			if err := conn.WriteMessage(msg.MsgType, msg.Data); err != nil {
-				log.Error(ws.WrapWritingMessageError(err))
+func handleWriteLoop(conn *websocket.Conn, channel chan ws.GenericMsg, finished chan struct{}) (done chan struct{}) {
+	done = make(chan struct{})
+
+	go func() {
+		for {
+			select {
+			case msg, ok := <-channel:
+				if !ok {
+					return
+				}
+				// log.Info("Sending ", msg.MsgType, string(msg.Data))
+				if err := conn.WriteMessage(msg.MsgType, msg.Data); err != nil {
+					log.Error(ws.WrapWritingMessageError(err))
+				}
+			case <-finished:
+				return
 			}
-		case <-finished:
-			return
 		}
-	}
+	}()
+
+	return done
 }
 
-func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished chan struct{}) {
-	defer close(channel)
-	for {
-		msg, err := clients.Read(conn)
-		if err != nil {
-			log.Error(err)
-			close(finished)
-			return
-		} else {
-			channel <- msg
+func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished chan struct{}) (done chan struct{}) {
+	done = make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for {
+			msg, err := clients.Read(conn)
+			if err != nil {
+				log.Error(err)
+				return
+			} else {
+				select {
+				case channel <- msg:
+				case <-finished:
+					return
+				}
+			}
 		}
-	}
+	}()
+
+	return done
 }
 
 func handleLocationMsg(user string, msg *ws.Message) error {
