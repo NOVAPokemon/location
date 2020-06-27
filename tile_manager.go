@@ -603,6 +603,9 @@ func (tm *TileManager) GetTileBoundsFromTileNr(tileNr int) (topLeft utils.Locati
 		Longitude: botRightLatLng.Lng.Degrees(),
 	}
 
+	log.Info("tileNr %d has bounds {%f, %f} {%f, %f}", tileNr, topLeft.Longitude, topLeft.Latitude,
+		botRight.Longitude, botRight.Latitude)
+
 	return topLeft, botRight
 }
 
