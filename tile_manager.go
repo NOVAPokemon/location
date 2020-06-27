@@ -247,7 +247,7 @@ func (tm *TileManager) GetTileNrFromLocation(location utils.Location, exclusive 
 
 	// translates top left corner to 0,0 and flips to maintain order
 	tileCol := int(math.Floor((180 + transformedPoint.X) / tm.tileSideLength))
-	tileRow := int(math.Floor((180 - transformedPoint.Y) / tm.tileSideLength))
+	tileRow := int(math.Floor(math.Abs(transformedPoint.Y - 180) / tm.tileSideLength))
 
 	if exclusive {
 		tileCol--
@@ -603,7 +603,7 @@ func (tm *TileManager) GetTileBoundsFromTileNr(tileNr int) (topLeft utils.Locati
 		Longitude: botRightLatLng.Lng.Degrees(),
 	}
 
-	log.Info("tileNr %d has bounds {%f, %f} {%f, %f}", tileNr, topLeft.Longitude, topLeft.Latitude,
+	log.Infof("tileNr %d has bounds {%f, %f} {%f, %f}", tileNr, topLeft.Longitude, topLeft.Latitude,
 		botRight.Longitude, botRight.Latitude)
 
 	return topLeft, botRight
