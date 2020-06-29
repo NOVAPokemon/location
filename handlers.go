@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/golang/geo/s2"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -35,7 +36,7 @@ const (
 )
 
 var (
-	tm                  *TileManager
+	cm                  *CellManager
 	serverName          string
 	serverNr            int64
 	timeoutInDuration   = time.Duration(config.Timeout) * time.Second
@@ -45,6 +46,7 @@ var (
 )
 
 func init() {
+
 	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
 		serviceNameHeadless = aux
 	} else {
@@ -86,18 +88,7 @@ func init() {
 
 			log.Infof("Loaded config: %+v", serverConfig)
 
-			topLeft := utils.Location{
-				Latitude:  serverConfig.TopLeftCorner.Latitude,
-				Longitude: serverConfig.TopLeftCorner.Longitude,
-			}
-
-			botRight := utils.Location{
-				Latitude:  serverConfig.BotRightCorner.Latitude,
-				Longitude: serverConfig.BotRightCorner.Longitude,
-			}
-
-			tm = NewTileManager(gyms, config.NumTilesInWorld, config.MaxPokemonsPerTile,
-				config.NumberOfPokemonsToGenerate, topLeft, botRight)
+			cm = NewCellManager(gyms, config)
 			go RefreshBoundariesPeriodic()
 			go refreshGymsPeriodic()
 			return
@@ -112,7 +103,7 @@ func insertDefaultBoundariesInDB() error {
 		return WrapLoadServerBoundaries(err)
 	}
 
-	var boundaryConfigs []utils.LocationServerBoundary
+	var boundaryConfigs []utils.LocationServerCells
 	err = json.Unmarshal(data, &boundaryConfigs)
 	if err != nil {
 		return WrapLoadServerBoundaries(err)
@@ -134,7 +125,7 @@ func refreshGymsPeriodic() {
 			log.Error(err)
 			continue
 		}
-		if err := tm.SetGyms(gyms); err != nil {
+		if err := cm.SetGyms(gyms); err != nil {
 			log.Error(err)
 			continue
 		}
@@ -148,7 +139,7 @@ func RefreshBoundariesPeriodic() {
 		if err != nil {
 			log.Error(err)
 		} else {
-			tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
+			cm.SetServerCells(serverConfig.Cells)
 		}
 	}
 }
@@ -167,12 +158,10 @@ func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if tm.isWithinBounds(gym.Gym.Location) {
-		err = tm.AddGym(gym)
-		if err != nil {
-			log.Error(wrapAddGymError(err))
-			return
-		}
+	err = cm.AddGym(gym)
+	if err != nil {
+		utils.LogAndSendHTTPError(&w, wrapAddGymError(err), http.StatusBadRequest)
+		return
 	}
 }
 
@@ -194,7 +183,7 @@ func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
-	config := &utils.LocationServerBoundary{}
+	config := &utils.LocationServerCells{}
 	servername := mux.Vars(r)[api.ServerNamePathVar]
 	err := json.NewDecoder(r.Body).Decode(config)
 	if err != nil {
@@ -206,7 +195,7 @@ func HandleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 		utils.LogAndSendHTTPError(&w, wrapSetServerConfigsError(err), http.StatusInternalServerError)
 		return
 	}
-	tm.SetBoundaries(config.TopLeftCorner, config.BotRightCorner)
+	cm.SetServerCells(config.Cells)
 }
 
 func HandleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
@@ -237,12 +226,9 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	loc := utils.Location{
-		Latitude:  lat,
-		Longitude: lon,
-	}
-
-	servers, err := getServersForLocations(loc)
+	latlon := s2.LatLngFromDegrees(lat, lon)
+	cell := s2.CellIDFromLatLng(latlon)
+	servers, err := getServersForCells(cell)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
 		return
@@ -262,14 +248,15 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	serverAddr := servers[0]
-	toSend, err := json.Marshal(serverAddr)
-	if err != nil {
-		utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
+	for serverAddr := range servers {
+		toSend, err := json.Marshal(serverAddr)
+		if err != nil {
+			utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write(toSend)
 		return
 	}
-
-	_, _ = w.Write(toSend)
 }
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
@@ -288,7 +275,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	doneReceive := handleMessagesLoop(conn, inChan, finish)
 	doneSend := handleWriteLoop(conn, outChan, finish)
 	defer func() {
-		if err := tm.RemoveTrainerLocation(user); err != nil {
+		if err := cm.RemoveTrainerLocation(user); err != nil {
 			log.Error(err)
 		}
 		close(finish)
@@ -426,10 +413,11 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 		return nil
 	}
 
-	pokemonTile, _, _, err := tm.GetTileNrFromLocation(catchPokemonMsg.WildPokemon.Location, false)
-	if err != nil {
+	wildPokemon := catchPokemonMsg.WildPokemon
+	pokemonCell := s2.CellFromLatLng(wildPokemon.Location)
+	if !cm.cellsOwned.ContainsCell(pokemonCell) {
 		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
-			Error: wrapCatchWildPokemonError(err).Error(),
+			Error: wrapCatchWildPokemonError(newPokemonNotFoundError(wildPokemon.Pokemon.Id.Hex())).Error(),
 		}.SerializeToWSMessage().Serialize())
 
 		channel <- ws.GenericMsg{
@@ -439,7 +427,7 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 		return wrapCatchWildPokemonError(err)
 	}
 
-	pokemon, err := tm.RemoveWildPokemonFromTile(pokemonTile, catchPokemonMsg.WildPokemon.Pokemon.Id.Hex())
+	pokemon, err := cm.RemoveWildPokemonFromCell(pokemonCell, catchPokemonMsg.WildPokemon.Pokemon.Id.Hex())
 	if err != nil {
 		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
 			Error: wrapCatchWildPokemonError(err).Error(),
@@ -506,38 +494,28 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 
 	locationMsg := desMsg.(*location.UpdateLocationMessage)
 
-	_, row, column, err := tm.GetTileNrFromLocation(locationMsg.Location, false)
+	log.Infof("received location update from %s at location: %+v", user, locationMsg.Location)
+
+	currCells, changed, err := cm.UpdateTrainerTiles(user, locationMsg.Location)
 	if err != nil {
-		return wrapHandleLocationMsgs(err)
+		return err
 	}
 
-	log.Infof("received location update from %s at {%d, %d}\n", user, column, row)
-
-	exitRect := tm.CalculateBoundaryForLocation(row, column, tm.exitBoundarySize)
-	tm.boundariesLock.RLock()
-	if !exitRect.Intersects(tm.serverRect) {
-		tm.boundariesLock.RUnlock()
-		return wrapHandleLocationMsgs(errors.New("out of bounds of the server"))
-	}
-	tm.boundariesLock.RUnlock()
-
-	currentTiles, changed := tm.UpdateTrainerTiles(user, row, column)
-
-	tilesPerServer, err := getServersForTiles(currentTiles...)
+	cellsPerServer, err := getServersForCells(currCells...)
 	if err != nil {
 		return err
 	}
 
 	if changed {
-		var servers []string
-		for server := range tilesPerServer {
-			servers = append(servers, server)
+		var serverNames []string
+		for serverName := range cellsPerServer {
+			serverNames = append(serverNames, serverName)
 		}
 
 		channel <- ws.GenericMsg{
 			MsgType: websocket.TextMessage,
 			Data: []byte(location.ServersMessage{
-				Servers: servers,
+				Servers: serverNames,
 			}.SerializeToWSMessage().Serialize()),
 		}
 	}
@@ -545,13 +523,13 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
 	channel <- ws.GenericMsg{
 		MsgType: websocket.TextMessage,
-		Data: []byte(location.TilesPerServerMessage{
-			TilesPerServer: tilesPerServer,
+		Data: []byte(location.CellsPerServerMessage{
+			CellsPerServer: cellsPerServer,
 			OriginServer:   myServer,
 		}.SerializeToWSMessage().Serialize()),
 	}
 
-	err = answerToLocationMsg(channel, tilesPerServer, myServer)
+	err = answerToLocationMsg(channel, cellsPerServer, myServer)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
 	}
@@ -573,15 +551,15 @@ func handleUpdateLocationWithTilesMsg(user string, msg *ws.Message, channel chan
 	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, locationMsg.TilesPerServer, myServer))
 }
 
-func answerToLocationMsg(channel chan<- ws.GenericMsg, tilesPerServer map[string][]int, myServer string) error {
+func answerToLocationMsg(channel chan<- ws.GenericMsg, tilesPerServer map[string]s2.CellUnion, myServer string) error {
 	myTiles := tilesPerServer[myServer]
 
 	if len(myTiles) > 0 {
 		return errors.New("user contacted server that isnt responsible for any tile")
 	}
 
-	gymsInVicinity := tm.getGymsInTiles(myTiles...)
-	pokemonInVicinity, err := tm.getPokemonsInTiles(myTiles...)
+	gymsInVicinity := cm.getGymsInTiles(myTiles...)
+	pokemonInVicinity, err := cm.getPokemonsInTiles(myTiles...)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
 	}
@@ -610,7 +588,7 @@ func getServersForTiles(tileNrs ...int) (map[string][]int, error) {
 	servers := map[string][]int{}
 	for serverName, config := range configs {
 		for i := range tileNrs {
-			loc := tm.GetTileCenterLocationFromTileNr(tileNrs[i])
+			loc := cm.GetTileCenterLocationFromTileNr(tileNrs[i])
 			if locationUtils.IsWithinBounds(loc, config.TopLeftCorner, config.BotRightCorner) {
 				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
 				servers[serverAddr] = append(servers[serverAddr], tileNrs[i])
@@ -621,23 +599,21 @@ func getServersForTiles(tileNrs ...int) (map[string][]int, error) {
 	return servers, nil
 }
 
-func getServersForLocations(locations ...utils.Location) ([]string, error) {
+func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
 	configs, err := locationdb.GetAllServerConfigs() // TODO Can be optimized, instead of fetching all the configs and looping
 	if err != nil {
 		return nil, err
 	}
 
-	var servers []string
-
+	servers := map[string]s2.CellUnion{}
 	for serverName, config := range configs {
-		for _, loc := range locations {
-			if locationUtils.IsWithinBounds(loc, config.TopLeftCorner, config.BotRightCorner) {
+		for _, cell := range cells {
+			if config.Cells.ContainsCellID(cell) {
 				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
-				servers = append(servers, serverAddr)
+				servers[serverAddr] = append(servers[serverAddr], cell)
 			}
 		}
 	}
-
 	return servers, nil
 }
 
@@ -646,5 +622,5 @@ func HandleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	tm.SetBoundaries(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
+	cm.SetServerCells(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
 }

@@ -61,11 +61,11 @@ func emitNrPokemonsInTile(tileNr int, tile *Tile) {
 }
 
 func emitTileMetrics() {
-	tm.activeTiles.Range(func(key, value interface{}) bool {
+	cm.activeCells.Range(func(key, value interface{}) bool {
 		tileNr := key.(int)
 		tile := value.(activeTileValueType)
 
-		numTrainersValue, ok := tm.activeTileTrainerNumber.Load(tileNr)
+		numTrainersValue, ok := cm.nrTrainersInCell.Load(tileNr)
 		if !ok {
 			return true
 		}

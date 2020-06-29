@@ -8,18 +8,25 @@ import (
 )
 
 const (
-	errorHandleLocationMsg    = "error handling location message"
-	errorHandleLocationWithTilesMsg    = "error handling location with tiles message"
-	errorLoadServerBoundaries = "error loading server boundaries"
-	errorCatchingPokemon      = "error catching pokemon"
-	errorInit                 = "error in INIT"
+	errorHandleLocationMsg          = "error handling location message"
+	errorHandleLocationWithTilesMsg = "error handling location with tiles message"
+	errorLoadServerBoundaries       = "error loading server boundaries"
+	errorCatchingPokemon            = "error catching pokemon"
+	errorInit                       = "error in INIT"
+	errorAddingGym                  = "error adding gym %s"
+	errorPokemonNotFoundFormat      = "could not find pokemon %s"
 )
 
 var (
-	errorInvalidItemCatch   = errors.New("invalid item to catch")
+	errorInvalidItemCatch = errors.New("invalid item to catch")
 )
 
 // Wrappers handlers
+
+func WrapSetGymsError(err error, gymId string) error {
+	return errors.Wrap(err, fmt.Sprintf(errorAddingGym, gymId))
+}
+
 func wrapAddGymError(err error) error {
 	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, AddGymLocationName))
 }
@@ -59,4 +66,8 @@ func WrapInit(err error) error {
 
 func WrapLoadServerBoundaries(err error) error {
 	return errors.Wrap(err, errorLoadServerBoundaries)
+}
+
+func newPokemonNotFoundError(pokemonId string) error {
+	return errors.New(fmt.Sprintf(errorPokemonNotFoundFormat, pokemonId))
 }

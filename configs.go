@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/NOVAPokemon/utils"
+	"github.com/golang/geo/s2"
 )
 
 type LocationServerConfig struct {
@@ -17,16 +17,17 @@ type LocationServerConfig struct {
 	// Generate configs
 	IntervalBetweenGenerations int `json:"interval_generate"` // in minutes
 	NumberOfPokemonsToGenerate int `json:"pokemons_to_generate"`
+	PokemonCellLevel           int `json:"pokemon_cell_level"`
+
+	GymsCellLevel int `json:"gyms_cell_level"`
 
 	MaxLevel  float64 `json:"max_level"`
 	MaxHP     float64 `json:"max_hp"`
 	MaxDamage float64 `json:"max_damage"`
 
-	MaxPokemonsPerTile int            `json:"max_pokemons_per_tile"`
-	NumTilesInWorld    int            `json:"num_tiles"`
-	TopLeftCorner      utils.Location `json:"topLeftCorner"`
-	BotRightCorner     utils.Location `json:"botRightCorner"`
+	Cells             s2.CellUnion `json:"Cells"`
+	TrainersCellLevel int          `json:"trainers_cell_level"`
 
-	EntryBoundarySize int `json:"entry_boundary_size"`
-	ExitBoundarySize  int `json:"exit_boundary_size"`
+	EntryBoundaryLevel int `json:"entry_boundary_size"`
+	ExitBoundaryLevel  int `json:"exit_boundary_size"`
 }
