@@ -192,7 +192,6 @@ func expandUnionToLevel(cellIds s2.CellUnion, level int) s2.CellUnion {
 	return cellIdsNormalized
 }
 
-// FIXME fix concurrency problem where another thread starts spawning pokemons simultaneously
 func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 	log.Infof("starting pokemon generation")
 
