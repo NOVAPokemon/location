@@ -161,7 +161,7 @@ func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 
 	err = cm.AddGym(gym)
 	if err != nil {
-		utils.LogAndSendHTTPError(&w, wrapAddGymError(err), http.StatusBadRequest)
+		log.Warn("add gym to db out of my bounds")
 		return
 	}
 }
