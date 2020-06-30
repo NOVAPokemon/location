@@ -373,7 +373,10 @@ func (cm *CellManager) LoadGyms(gyms []utils.GymWithServer) {
 	for _, gymWithSrv := range gyms {
 		gym := gymWithSrv.Gym
 		cellId := s2.CellIDFromLatLng(gym.Location)
+
+		cm.cellsOwnedLock.RLock()
 		if cm.cellsOwned.ContainsCellID(cellId) {
+			cm.cellsOwnedLock.RUnlock()
 			parent := cellId.Parent(cm.gymsCellLevel)
 			gymsInterface, ok := cm.gymsInCell.Load(parent)
 			var gyms gymsFromTileValueType
@@ -385,6 +388,7 @@ func (cm *CellManager) LoadGyms(gyms []utils.GymWithServer) {
 			gyms = append(gyms, gymWithSrv)
 			cm.gymsInCell.Store(parent, gyms)
 		} else {
+			cm.cellsOwnedLock.RUnlock()
 			log.Infof("Gym %s out of bounds", gym.Name)
 		}
 	}
@@ -433,9 +437,13 @@ func (cm *CellManager) logTileManagerState() {
 
 func (cm *CellManager) AddGym(gymWithSrv utils.GymWithServer) error {
 	cellId := s2.CellIDFromLatLng(gymWithSrv.Gym.Location)
+
+	cm.cellsOwnedLock.RLock()
 	if !cm.cellsOwned.ContainsCellID(cellId) {
+		cm.cellsOwnedLock.RUnlock()
 		return errors.New("out of bounds of server")
 	}
+	cm.cellsOwnedLock.RUnlock()
 
 	cellIdAtGymsLevel := cellId.Parent(cm.gymsCellLevel)
 	gymsInterface, ok := cm.gymsInCell.Load(cellIdAtGymsLevel)

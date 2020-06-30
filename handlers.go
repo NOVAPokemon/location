@@ -419,7 +419,10 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 
 	wildPokemon := catchPokemonMsg.WildPokemon
 	pokemonCell := s2.CellFromLatLng(wildPokemon.Location)
+
+	cm.cellsOwnedLock.RLock()
 	if !cm.cellsOwned.ContainsCell(pokemonCell) {
+		cm.cellsOwnedLock.RUnlock()
 		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
 			Error: wrapCatchWildPokemonError(newPokemonNotFoundError(wildPokemon.Pokemon.Id.Hex())).Error(),
 		}.SerializeToWSMessage().Serialize())
@@ -430,6 +433,7 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 		}
 		return wrapCatchWildPokemonError(err)
 	}
+	cm.cellsOwnedLock.RUnlock()
 
 	pokemon, err := cm.RemoveWildPokemonFromCell(pokemonCell, catchPokemonMsg.WildPokemon.Pokemon.Id.Hex())
 	if err != nil {
