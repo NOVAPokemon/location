@@ -4,7 +4,7 @@
   "update_gyms_interval": 30,
   "update_pokemon_interval": 15,
   "update_config_interval": 15,
-  "interval_generate": 15,
+  "interval_generate": 60,
   "pokemon_cell_level": 20,
   "gyms_cell_level": 17,
   "max_level": 100.0,

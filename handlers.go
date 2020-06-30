@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 
 	"github.com/NOVAPokemon/utils"
@@ -229,10 +228,7 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	latlon := s2.LatLng{
-		Lat: s1.Angle(lat),
-		Lng: s1.Angle(lon),
-	}
+	latlon := s2.LatLngFromDegrees(lat, lon)
 	cell := s2.CellIDFromLatLng(latlon)
 	servers, err := getServersForCells(cell)
 	if err != nil {

@@ -2,7 +2,7 @@ package main
 
 import (
 	"errors"
-	"math"
+	"math/rand"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/pokemons"
+	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 	log "github.com/sirupsen/logrus"
 )
@@ -18,12 +19,12 @@ type (
 	gymsFromTileValueType     = []utils.GymWithServer
 	trainerTilesValueType     = s2.CellUnion
 	nrTrainersInCellValueType = *int32
+	nrTrainersInCellKeyType   = s2.CellID
 	PokemonsInCellValueType   = utils.WildPokemonWithServer
 )
 
 const (
-	EarthSurfaceArea = 510064472000000
-	TotalSphereArea  = 4 * math.Pi
+	EarthRadiusInMeter = 6378000
 )
 
 type CellManager struct {
@@ -39,8 +40,9 @@ type CellManager struct {
 	gymsCellLevel     int
 	gymsRegionCoverer s2.RegionCoverer
 
+	totalActiveCells int
 	nrTrainersInCell sync.Map
-	createCellLock   sync.Mutex
+	changeCellsLock  sync.Mutex
 
 	trainerCells          sync.Map
 	trainersCellsLevel    int
@@ -114,8 +116,11 @@ func (cm *CellManager) RemoveTrainerLocation(trainerId string) error {
 		trainerNrs := trainerNrsValue.(nrTrainersInCellValueType)
 		result := atomic.AddInt32(trainerNrs, -1)
 		if result == 0 {
+			cm.changeCellsLock.Lock()
 			log.Warnf("no trainers in %d", tileNrs[i])
 			cm.nrTrainersInCell.Delete(tileNrs[i])
+			cm.totalActiveCells--
+			cm.changeCellsLock.Unlock()
 		}
 	}
 
@@ -188,39 +193,60 @@ func expandUnionToLevel(cellIds s2.CellUnion, level int) s2.CellUnion {
 }
 
 // FIXME fix concurrency problem where another thread starts spawning pokemons simultaneously
-func (cm *CellManager) generateWildPokemonsForZonePeriodically(cellId s2.CellID) {
-	trainersCellId := cellId.Parent(cm.trainersCellsLevel)
+func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
+	log.Infof("starting pokemon generation")
+
 	for {
-		_, ok := cm.nrTrainersInCell.Load(trainersCellId)
-		if !ok {
-			log.Warnf("Stopped generating pokemons for zone %d due to cell %d being inactive", cellId, trainersCellId)
-			return
+		cm.changeCellsLock.Lock()
+
+		if cm.totalActiveCells == 0 {
+			cm.changeCellsLock.Unlock()
+			time.Sleep(time.Duration(config.MaxIntervalBetweenGenerations) * time.Second)
+			continue
 		}
 
-		_, ok = cm.PokemonInCell.Load(cellId)
-		if !ok {
-			wildPokemon := generateWildPokemon(pokemonSpecies, cellId)
-			cm.PokemonInCell.Store(wildPokemon.Pokemon.Id.Hex(), wildPokemon)
-			log.Infof("Added wild pokemon %s to cellId: %d", wildPokemon.Pokemon.Id.Hex(), cellId)
-		} else {
-			log.Infof("Skipped cellId:%d", cellId)
-		}
+		cellToGenerateTo := rand.Intn(cm.totalActiveCells)
 
-		time.Sleep(time.Duration(config.IntervalBetweenGenerations) * time.Second)
+		currCell := 0
+		cm.nrTrainersInCell.Range(func(cellIdInterface, _ interface{}) bool {
+			if currCell == cellToGenerateTo {
+				cellId := cellIdInterface.(nrTrainersInCellKeyType)
+				_, ok := cm.PokemonInCell.Load(cellId)
+				if !ok {
+					wildPokemon := generateWildPokemon(pokemonSpecies, cellId)
+					log.Infof("Added wild pokemon %s to cellId: %d", wildPokemon.Pokemon.Id.Hex(), cellId)
+					cm.PokemonInCell.Store(cellId, wildPokemon)
+				} else {
+					log.Info("Will skip cellId %d since it already has a pokemon")
+				}
+
+				return false
+			}
+
+			currCell++
+			return true
+		})
+
+		cm.changeCellsLock.Unlock()
+
+		// TODO maybe change this to divide by percentage of cells that are active
+		sleepDuration := time.Duration(float64(config.MaxIntervalBetweenGenerations) / float64(cm.
+			totalActiveCells)) * time.Second
+		time.Sleep(sleepDuration)
 	}
 }
 
 func (cm *CellManager) RemoveWildPokemonFromCell(cell s2.Cell, pokemonId string) (*pokemons.Pokemon, error) {
 	value, ok := cm.PokemonInCell.Load(cell.ID())
 	if !ok {
-		return nil, errors.New("cell is not loaded")
+		return nil, errors.New("cell has no pokemon")
 	}
 
 	pokemon := value.(PokemonsInCellValueType)
 	if pokemon.Pokemon.Id.Hex() != pokemonId {
 		return nil, errors.New("pokemon not found")
 	} else {
-		cm.PokemonInCell.Delete(pokemonId)
+		cm.PokemonInCell.Delete(cell.ID())
 		return &pokemon.Pokemon, nil
 	}
 }
@@ -245,7 +271,10 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 		numTrainers := trainerNrsValue.(nrTrainersInCellValueType)
 		result := atomic.AddInt32(numTrainers, -1)
 		if result == 0 {
+			cm.changeCellsLock.Lock()
+			cm.totalActiveCells--
 			cm.nrTrainersInCell.Delete(toRemove[i])
+			cm.changeCellsLock.Unlock()
 			log.Warnf("Disabling tile %d", toRemove[i])
 		}
 	}
@@ -253,7 +282,7 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 	for i := range toAdd {
 		_, ok := cm.nrTrainersInCell.Load(toAdd[i])
 		if !ok {
-			cm.createCellLock.Lock()
+			cm.changeCellsLock.Lock()
 			_, ok = cm.nrTrainersInCell.Load(toAdd[i])
 			if ok {
 				trainerNrsValue, ok := cm.nrTrainersInCell.Load(toAdd[i])
@@ -263,19 +292,18 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 
 				numTrainers := trainerNrsValue.(nrTrainersInCellValueType)
 				atomic.AddInt32(numTrainers, 1)
-				cm.createCellLock.Unlock()
+				cm.changeCellsLock.Unlock()
 				continue
 			}
 			var numTrainers int32 = 1
 			cm.nrTrainersInCell.Store(toAdd[i], &numTrainers)
+			cm.totalActiveCells++
 
 			cellUnion := s2.CellUnion{toAdd[i]}
 			expandUnionToLevel(cellUnion, cm.pokemonCellsLevel)
 
-			for i := range cellUnion {
-				go cm.generateWildPokemonsForZonePeriodically(cellUnion[i])
-			}
-			cm.createCellLock.Unlock()
+			// TODO this can go to after store no?
+			cm.changeCellsLock.Unlock()
 			continue
 		} else {
 
@@ -295,7 +323,7 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 
 func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2.LatLng) (toRemove, toAdd,
 	currentTiles s2.CellUnion, err error) {
-	exitTileCap := cm.CalculateCapForLocation(userLoc, float64(cm.exitBoundarySize))
+	exitTileCap := CalculateCapForLocation(userLoc, float64(cm.exitBoundarySize))
 
 	// calc cells around user for exit boundary
 	newExitCellIds := cm.trainersRegionCoverer.InteriorCellUnion(s2.Region(exitTileCap))
@@ -303,11 +331,12 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 	cm.cellsOwnedLock.RLock()
 	if !cm.cellsOwned.Intersects(newExitCellIds) {
 		cm.cellsOwnedLock.RUnlock()
-		return nil, nil, nil, errors.New("out of bounds of the server")
+		return nil, nil, nil,
+			errors.New("server cells do not intersect client exit boundaries")
 	}
 	cm.cellsOwnedLock.RUnlock()
 
-	entryTileCap := cm.CalculateCapForLocation(userLoc, float64(cm.entryBoundarySize))
+	entryTileCap := CalculateCapForLocation(userLoc, float64(cm.entryBoundarySize))
 
 	// calc cells around user for entry boundary
 	entryCellIds := cm.trainersRegionCoverer.InteriorCellUnion(s2.Region(entryTileCap))
@@ -336,9 +365,9 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 	return toRemove, toAdd, currentTiles, nil
 }
 
-func (cm *CellManager) CalculateCapForLocation(latLon s2.LatLng, boundarySize float64) s2.Cap {
-	s2.PointFromLatLng(s2.LatLng{})
-	return s2.CapFromCenterArea(s2.PointFromLatLng(latLon), boundarySize*TotalSphereArea/EarthSurfaceArea)
+func CalculateCapForLocation(latLon s2.LatLng, boundarySize float64) s2.Cap {
+	angle := s1.Angle(boundarySize / EarthRadiusInMeter)
+	return s2.CapFromCenterAngle(s2.PointFromLatLng(latLon), angle)
 }
 
 func (cm *CellManager) LoadGyms(gyms []utils.GymWithServer) {
