@@ -139,7 +139,8 @@ func RefreshBoundariesPeriodic() {
 		if err != nil {
 			log.Error(err)
 		} else {
-			cm.SetServerCells(serverConfig.Cells)
+			cells := convertStringsToCellIds(serverConfig.CellIdsStrings)
+			cm.SetServerCells(cells)
 		}
 	}
 }
@@ -195,7 +196,9 @@ func HandleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 		utils.LogAndSendHTTPError(&w, wrapSetServerConfigsError(err), http.StatusInternalServerError)
 		return
 	}
-	cm.SetServerCells(config.Cells)
+
+	cellIds := convertStringsToCellIds(config.CellIdsStrings)
+	cm.SetServerCells(cellIds)
 }
 
 func HandleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
@@ -587,8 +590,10 @@ func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
 
 	servers := map[string]s2.CellUnion{}
 	for serverName, config := range configs {
+		cellIds := convertStringsToCellIds(config.CellIdsStrings)
+
 		for _, cell := range cells {
-			if config.Cells.ContainsCellID(cell) {
+			if cellIds.ContainsCellID(cell) {
 				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
 				servers[serverAddr] = append(servers[serverAddr], cell)
 			}
@@ -603,5 +608,6 @@ func HandleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
 		log.Fatal(err)
 	}
 
-	cm.SetServerCells(serverConfig.Cells)
+	cellIds := convertStringsToCellIds(serverConfig.CellIdsStrings)
+	cm.SetServerCells(cellIds)
 }

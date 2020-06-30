@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -444,4 +445,17 @@ func (cm *CellManager) SetGyms(gymWithSrv []utils.GymWithServer) error {
 		}
 	}
 	return nil
+}
+
+func convertStringsToCellIds(cellIdsStrings []string) s2.CellUnion {
+	cells := make(s2.CellUnion, len(cellIdsStrings))
+	for i, cellId := range cellIdsStrings {
+		if id, err := strconv.ParseUint(cellId, 10, 64); err == nil {
+			cells[i] = s2.CellID(id)
+		} else {
+			panic("error loading config")
+		}
+	}
+
+	return cells
 }
