@@ -11,6 +11,6 @@
   "max_hp": 500.0,
   "max_damage": 500.0,
   "trainers_cell_level": 18,
-  "entry_boundary_size": 1,
-  "exit_boundary_size": 2
+  "entry_boundary_size": 250,
+  "exit_boundary_size": 500
 }

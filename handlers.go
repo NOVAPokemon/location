@@ -89,7 +89,7 @@ func init() {
 
 			cm = NewCellManager(gyms, config)
 			go cm.generateWildPokemonsForServerPeriodically()
-			
+
 			go RefreshBoundariesPeriodic()
 			go refreshGymsPeriodic()
 			return
