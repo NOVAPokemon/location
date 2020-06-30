@@ -114,7 +114,7 @@ func (cm *CellManager) RemoveTrainerLocation(trainerId string) error {
 		trainerNrs := trainerNrsValue.(nrTrainersInCellValueType)
 		result := atomic.AddInt32(trainerNrs, -1)
 		if result == 0 {
-			log.Warnf("no trainers in ", tileNrs[i])
+			log.Warnf("no trainers in %d", tileNrs[i])
 			cm.nrTrainersInCell.Delete(tileNrs[i])
 		}
 	}
@@ -199,10 +199,9 @@ func (cm *CellManager) generateWildPokemonsForZonePeriodically(cellId s2.CellID)
 
 		_, ok = cm.PokemonInCell.Load(cellId)
 		if !ok {
-
 			wildPokemon := generateWildPokemon(pokemonSpecies, cellId)
 			cm.PokemonInCell.Store(wildPokemon.Pokemon.Id.Hex(), wildPokemon)
-			log.Infof("Added wild pokemon to cellId:%d", wildPokemon, cellId)
+			log.Infof("Added wild pokemon %s to cellId: %d", wildPokemon.Pokemon.Id.Hex(), cellId)
 		} else {
 			log.Infof("Skipped cellId:%d", cellId)
 		}
