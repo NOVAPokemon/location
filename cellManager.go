@@ -14,10 +14,10 @@ import (
 )
 
 type (
-	gymsFromTileValueType = []utils.GymWithServer
-	trainerTilesValueType = s2.CellUnion
+	gymsFromTileValueType     = []utils.GymWithServer
+	trainerTilesValueType     = s2.CellUnion
 	nrTrainersInCellValueType = *int32
-	PokemonsInCellValueType = utils.WildPokemonWithServer
+	PokemonsInCellValueType   = utils.WildPokemonWithServer
 )
 
 const (
@@ -45,11 +45,9 @@ type CellManager struct {
 	trainersCellsLevel    int
 	trainersRegionCoverer s2.RegionCoverer
 
-	PokemonInCell            sync.Map
-	pokemonCellsLevel        int
-	maxPokemonsPerCell       int
-	maxPokemonsPerGeneration int
-	pokemonRegionCoverer     s2.RegionCoverer
+	PokemonInCell        sync.Map
+	pokemonCellsLevel    int
+	pokemonRegionCoverer s2.RegionCoverer
 }
 
 func NewCellManager(gyms []utils.GymWithServer, config *LocationServerConfig) *CellManager {
@@ -76,8 +74,7 @@ func NewCellManager(gyms []utils.GymWithServer, config *LocationServerConfig) *C
 			MaxLevel: config.TrainersCellLevel,
 			LevelMod: 1,
 		},
-		maxPokemonsPerGeneration: config.NumberOfPokemonsToGenerate,
-		cellsOwned:               config.Cells,
+		cellsOwned: s2.CellUnion{},
 	}
 
 	toReturn.LoadGyms(gyms)
@@ -130,48 +127,63 @@ func (cm *CellManager) GetTrainerTile(trainerId string) (interface{}, bool) {
 	return tileNrInterface, ok
 }
 
-func (cm *CellManager) getPokemonsInRegion(region s2.Region) ([]utils.WildPokemonWithServer, error) {
-
+func (cm *CellManager) getPokemonsInCells(cellIds s2.CellUnion) []utils.WildPokemonWithServer {
 	var pokemonsInTiles []utils.WildPokemonWithServer
-	cellNrs := cm.pokemonRegionCoverer.FastCovering(region)
 
-	for cellId := range cellNrs {
+	cellIdsNormalized := expandUnionToLevel(cellIds, cm.pokemonCellsLevel)
+
+	for cellId := range cellIdsNormalized {
 		cellInterface, ok := cm.PokemonInCell.Load(cellId)
 		if !ok {
 			continue
 		}
+
 		pokemonsInTiles = append(pokemonsInTiles, cellInterface.(PokemonsInCellValueType))
 	}
 
-	return pokemonsInTiles, nil
+	return pokemonsInTiles
 }
 
-func (cm *CellManager) getGymsInTiles(cellIds s2.CellUnion) []utils.GymWithServer {
-	var gymsInTiles []utils.GymWithServer
+func (cm *CellManager) getGymsInCells(cellIds s2.CellUnion) []utils.GymWithServer {
+	var (
+		gymsInCells []utils.GymWithServer
+	)
 
-	for cellId := range cellIds {
-		cell := s2.CellFromCellID(cellId)
-		if cell.Level() > cm.gymsCellLevel {
-			cellId = cell.ID().Parent()
-		}
-		gymsInTileInterface, ok := cm.gymsInCell.Load(tileNr)
+	cellIdsNormalized := expandUnionToLevel(cellIds, cm.gymsCellLevel)
 
+	for _, cellId := range cellIdsNormalized {
+		gymsInTileInterface, ok := cm.gymsInCell.Load(cellId)
 		if !ok {
-			return []utils.GymWithServer{}
+			continue
 		}
-		/*
-			var gymsInVicinity []utils.Gym
-			for _, gym := range gymsInTile {
-				distance := gps.CalcDistanceBetweenLocations(location, gym.Location)
-				if distance <= config.Vicinity {
-					gymsInVicinity = append(gymsInVicinity, gym)
-				}
-			}
-		*/
-		gymsInTiles = append(gymsInTiles, gymsInTileInterface.(gymsFromTileValueType)...)
+
+		gymsInCells = append(gymsInCells, gymsInTileInterface.(gymsFromTileValueType)...)
 	}
 
-	return gymsInTiles
+	return gymsInCells
+}
+
+func expandUnionToLevel(cellIds s2.CellUnion, level int) s2.CellUnion {
+	cellIdsNormalized := s2.CellUnion{}
+
+	for _, cellId := range cellIds {
+		cell := s2.CellFromCellID(cellId)
+		if cell.Level() > level {
+			cellId = cell.ID().Parent(level)
+			cellIdsNormalized = append(cellIdsNormalized, cellId)
+		} else if cell.Level() < level {
+			childrenAtLevel := s2.CellUnion{cellId}
+			childrenAtLevel.Denormalize(cm.gymsCellLevel, 1)
+
+			cellIdsNormalized = append(cellIdsNormalized, childrenAtLevel...)
+		}
+	}
+
+	if !cellIdsNormalized.IsValid() {
+		panic("cells are not valid")
+	}
+
+	return cellIdsNormalized
 }
 
 // FIXME fix concurrency problem where another thread starts spawning pokemons simultaneously
@@ -185,7 +197,7 @@ func (cm *CellManager) generateWildPokemonsForZonePeriodically(cellId s2.CellID)
 		}
 
 		_, ok = cm.PokemonInCell.Load(cellId)
-		if ! ok {
+		if !ok {
 
 			wildPokemon := generateWildPokemon(pokemonSpecies, cellId)
 			cm.PokemonInCell.Store(wildPokemon.Pokemon.Id.Hex(), wildPokemon)
@@ -258,7 +270,8 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 			cm.nrTrainersInCell.Store(toAdd[i], &numTrainers)
 
 			cellUnion := s2.CellUnion{toAdd[i]}
-			cellUnion.ExpandAtLevel(cm.pokemonCellsLevel)
+			expandUnionToLevel(cellUnion, cm.pokemonCellsLevel)
+
 			for i := range cellUnion {
 				go cm.generateWildPokemonsForZonePeriodically(cellUnion[i])
 			}
@@ -280,7 +293,8 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 	return currentTiles, changed, nil
 }
 
-func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2.LatLng) (toRemove, toAdd, currentTiles s2.CellUnion, err error) {
+func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2.LatLng) (toRemove, toAdd,
+	currentTiles s2.CellUnion, err error) {
 	exitTileCap := cm.CalculateCapForLocation(userLoc, float64(cm.exitBoundarySize))
 
 	// calc cells around user for exit boundary
@@ -316,6 +330,8 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 
 	// adds tiles to keep and new tiles to load in orded to return which cells user should load
 	currentTiles = s2.CellUnionFromUnion(toAdd, cellsToKeep)
+
+	// TODO normalize cells to trainers level?
 
 	return toRemove, toAdd, currentTiles, nil
 }
@@ -389,7 +405,6 @@ func (cm *CellManager) logTileManagerState() {
 
 func (cm *CellManager) AddGym(gymWithSrv utils.GymWithServer) error {
 	cellId := s2.CellIDFromLatLng(gymWithSrv.Gym.Location)
-
 	if !cm.cellsOwned.ContainsCellID(cellId) {
 		return errors.New("out of bounds of server")
 	}

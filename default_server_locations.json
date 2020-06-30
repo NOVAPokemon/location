@@ -1,46 +1,28 @@
 [
   {
     "ServerName": "location-0",
-    "TopLeftCorner": {
-      "Latitude": 85.05115,
-      "Longitude": -180.0
-    },
-    "BotRightCorner": {
-      "Latitude": 0.0,
-      "Longitude": 0.0
-    }
+    "Cells": [
+      1152921504606846976,
+      10376293541461622784
+    ]
   },
   {
     "ServerName": "location-1",
-    "TopLeftCorner": {
-      "Latitude": 85.05115,
-      "Longitude": 0.0
-    },
-    "BotRightCorner": {
-      "Latitude": 0.0,
-      "Longitude": 180.0
-    }
+    "Cells":[
+      3458764513820540928,
+      12682136550675316736
+    ]
   },
   {
     "ServerName": "location-2",
-    "TopLeftCorner": {
-      "Latitude": 0.0,
-      "Longitude": -180.0
-    },
-    "BotRightCorner": {
-      "Latitude": -85.05115,
-      "Longitude": 0.0
-    }
+    "Cells": [
+      5764607523034234880
+    ]
   },
   {
     "ServerName": "location-3",
-    "TopLeftCorner": {
-      "Latitude": 0.0,
-      "Longitude": 0.0
-    },
-    "BotRightCorner": {
-      "Latitude": -85.05115,
-      "Longitude": 180.0
-    }
+    "Cells": [
+      8070450532247928832
+    ]
   }
 ]

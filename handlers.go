@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/golang/geo/s2"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -14,11 +13,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/geo/s1"
+	"github.com/golang/geo/s2"
+
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
 	locationdb "github.com/NOVAPokemon/utils/database/location"
-	locationUtils "github.com/NOVAPokemon/utils/location"
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/location"
@@ -46,7 +47,6 @@ var (
 )
 
 func init() {
-
 	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
 		serviceNameHeadless = aux
 	} else {
@@ -226,7 +226,10 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	latlon := s2.LatLngFromDegrees(lat, lon)
+	latlon := s2.LatLng{
+		Lat: s1.Angle(lat),
+		Lng: s1.Angle(lon),
+	}
 	cell := s2.CellIDFromLatLng(latlon)
 	servers, err := getServersForCells(cell)
 	if err != nil {
@@ -546,23 +549,20 @@ func handleUpdateLocationWithTilesMsg(user string, msg *ws.Message, channel chan
 	locationMsg := desMsg.(*location.UpdateLocationWithTilesMessage)
 	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
 
-	log.Infof("received precomputed location update from %s with %v\n", user, locationMsg.TilesPerServer)
+	log.Infof("received precomputed location update from %s with %v\n", user, locationMsg.CellsPerServer)
 
-	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, locationMsg.TilesPerServer, myServer))
+	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, locationMsg.CellsPerServer, myServer))
 }
 
-func answerToLocationMsg(channel chan<- ws.GenericMsg, tilesPerServer map[string]s2.CellUnion, myServer string) error {
-	myTiles := tilesPerServer[myServer]
+func answerToLocationMsg(channel chan<- ws.GenericMsg, cellsPerServer map[string]s2.CellUnion, myServer string) error {
+	cells := cellsPerServer[myServer]
 
-	if len(myTiles) > 0 {
+	if len(cells) > 0 {
 		return errors.New("user contacted server that isnt responsible for any tile")
 	}
 
-	gymsInVicinity := cm.getGymsInTiles(myTiles...)
-	pokemonInVicinity, err := cm.getPokemonsInTiles(myTiles...)
-	if err != nil {
-		return wrapHandleLocationMsgs(err)
-	}
+	gymsInVicinity := cm.getGymsInCells(cells)
+	pokemonInVicinity := cm.getPokemonsInCells(cells)
 
 	channel <- ws.GenericMsg{
 		MsgType: websocket.TextMessage,
@@ -577,26 +577,6 @@ func answerToLocationMsg(channel chan<- ws.GenericMsg, tilesPerServer map[string
 	}
 
 	return nil
-}
-
-func getServersForTiles(tileNrs ...int) (map[string][]int, error) {
-	configs, err := locationdb.GetAllServerConfigs() // TODO Can be optimized, instead of fetching all the configs and looping
-	if err != nil {
-		return nil, err
-	}
-
-	servers := map[string][]int{}
-	for serverName, config := range configs {
-		for i := range tileNrs {
-			loc := cm.GetTileCenterLocationFromTileNr(tileNrs[i])
-			if locationUtils.IsWithinBounds(loc, config.TopLeftCorner, config.BotRightCorner) {
-				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
-				servers[serverAddr] = append(servers[serverAddr], tileNrs[i])
-			}
-		}
-	}
-
-	return servers, nil
 }
 
 func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
@@ -622,5 +602,6 @@ func HandleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cm.SetServerCells(serverConfig.TopLeftCorner, serverConfig.BotRightCorner)
+
+	cm.SetServerCells(serverConfig.Cells)
 }

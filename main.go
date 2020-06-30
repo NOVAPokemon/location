@@ -2,10 +2,10 @@ package main
 
 import (
 	"encoding/json"
-	"github.com/golang/geo/s2"
 	"io/ioutil"
-	"math"
 	"math/rand"
+
+	"github.com/golang/geo/s2"
 
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/pokemons"
@@ -75,17 +75,7 @@ func loadConfig() *LocationServerConfig {
 		return nil
 	}
 
-	if !isPerfectSquare(config.NumTilesInWorld) {
-		log.Panic("Number of regions is not a perfect square (i.e. 4, 9, 16...)")
-	}
-
 	return &config
-}
-
-func isPerfectSquare(nr int) bool {
-	sqrt := math.Sqrt(float64(nr))
-	return sqrt*sqrt == float64(nr)
-
 }
 
 func generateWildPokemon(pokemonSpecies []string, cellId s2.CellID) utils.WildPokemonWithServer {

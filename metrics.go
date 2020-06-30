@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -10,7 +8,7 @@ import (
 )
 
 var (
-	tileMetrics      = make(map[string]prometheus.Gauge)
+	// tileMetrics      = make(map[string]prometheus.Gauge)
 	connectedClients = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "location_connected_clients",
 		Help: "The total number of connected clients",
@@ -26,6 +24,7 @@ func emitNrConnectedClients() {
 	connectedClients.Set(float64(counter))
 }
 
+/*
 func emitNrConnectedTrainersInTile(tileNr int, numTrainers int32) {
 	name := fmt.Sprintf("location_tile_%d_connected_clients", tileNr)
 	gauge, ok := tileMetrics[name]
@@ -77,13 +76,14 @@ func emitTileMetrics() {
 		return true
 	})
 }
+*/
 
 // metrics for prometheus
 func recordMetrics() {
 	go func() {
 		for {
 			emitNrConnectedClients()
-			emitTileMetrics()
+			// emitTileMetrics()
 			time.Sleep(8 * time.Second)
 		}
 	}()

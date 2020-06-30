@@ -5,14 +5,12 @@
   "update_pokemon_interval": 15,
   "update_config_interval": 15,
   "interval_generate": 15,
-  "pokemons_to_generate": 10,
-  "max_pokemons_per_tile": 20,
+  "pokemon_cell_level": 20,
+  "gyms_cell_level": 17,
   "max_level": 100.0,
   "max_hp": 500.0,
   "max_damage": 500.0,
+  "trainers_cell_level": 18,
   "entry_boundary_size": 1,
-  "exit_boundary_size": 2,
-  "pokemon_cell_level": 20,
-  "gyms_cell_level": 17,
-  "trainers_cell_level": 18
+  "exit_boundary_size": 2
 }
