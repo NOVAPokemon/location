@@ -88,6 +88,8 @@ func init() {
 			log.Infof("Loaded config: %+v", serverConfig)
 
 			cm = NewCellManager(gyms, config)
+			go cm.generateWildPokemonsForServerPeriodically()
+			
 			go RefreshBoundariesPeriodic()
 			go refreshGymsPeriodic()
 			return
