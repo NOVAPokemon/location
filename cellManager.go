@@ -16,10 +16,10 @@ import (
 )
 
 type (
-	gymsFromTileValueType     = []utils.GymWithServer
-	trainerTilesValueType     = s2.CellUnion
+	gymsFromTileValueType = []utils.GymWithServer
+	trainerTilesValueType = s2.CellUnion
 	nrTrainersInCellValueType = *int32
-	PokemonsInCellValueType   = utils.WildPokemonWithServer
+	PokemonsInCellValueType = utils.WildPokemonWithServer
 )
 
 const (
@@ -40,7 +40,7 @@ type CellManager struct {
 	gymsCellLevel     int
 	gymsRegionCoverer s2.RegionCoverer
 
-	totalNrTrainers  int
+	totalNrTrainers  *int64
 	nrTrainersInCell sync.Map
 	changeCellsLock  sync.Mutex
 
@@ -122,7 +122,6 @@ func (cm *CellManager) RemoveTrainerLocation(trainerId string) error {
 			cm.changeCellsLock.Lock()
 			log.Warnf("no trainers in %d", tileNrs[i])
 			cm.nrTrainersInCell.Delete(tileNrs[i])
-			cm.totalNrTrainers--
 			cm.changeCellsLock.Unlock()
 		}
 	}
@@ -234,7 +233,8 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 
 		// TODO maybe change this to divide by percentage of cells that are active
 		cm.changeCellsLock.Lock()
-		sleepDuration := time.Duration(float64(config.MaxIntervalBetweenGenerations)/float64(cm.totalNrTrainers)) * time.Second
+		nrTrainersCopy := atomic.LoadInt64(cm.totalNrTrainers)
+		sleepDuration := time.Duration(float64(config.MaxIntervalBetweenGenerations)/float64(nrTrainersCopy)) * time.Second
 		cm.changeCellsLock.Unlock()
 		time.Sleep(sleepDuration)
 	}
@@ -276,7 +276,6 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 		result := atomic.AddInt32(numTrainers, -1)
 		if result == 0 {
 			cm.changeCellsLock.Lock()
-			cm.totalNrTrainers--
 			cm.nrTrainersInCell.Delete(toRemove[i])
 			cm.changeCellsLock.Unlock()
 			log.Warnf("Disabling tile %d", toRemove[i])
@@ -301,8 +300,6 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 			}
 			var numTrainers int32 = 1
 			cm.nrTrainersInCell.Store(toAdd[i], &numTrainers)
-			cm.totalNrTrainers++
-
 			cellUnion := s2.CellUnion{toAdd[i]}
 			expandUnionToLevel(cellUnion, cm.pokemonCellsLevel)
 
@@ -320,7 +317,6 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 			atomic.AddInt32(numTrainers, 1)
 		}
 	}
-
 	cm.trainerCells.Store(trainerId, currentTiles)
 	return currentTiles, changed, nil
 }
@@ -496,6 +492,5 @@ func convertStringsToCellIds(cellIdsStrings []string) s2.CellUnion {
 			panic("error loading config")
 		}
 	}
-
 	return cells
 }
