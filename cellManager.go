@@ -240,6 +240,8 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 				}
 			}
 
+			object.AddPokemon(pokemonGenerated)
+
 			return true
 		})
 
