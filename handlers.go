@@ -213,8 +213,8 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			panic(err)
 		}
-		for serverName, _ := range serverConfigs {
-			u := url.URL{Scheme: "http", Host: serverName, Path: fmt.Sprintf(api.GetServerForLocationPath)}
+		for serverName := range serverConfigs {
+			u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless), Path: fmt.Sprintf(api.GetServerForLocationPath)}
 			q := u.Query()
 			q.Set(api.ServerNamePathVar, serverName)
 			resp, err := http.Get(u.String())
@@ -239,6 +239,7 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 			return true
 		})
 	}
+
 	if toWrite, err := json.Marshal(toSend); err == nil {
 		_, _ = w.Write(toWrite)
 	}
