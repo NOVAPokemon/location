@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 )
 
-type PokemonsInCellValueType = utils.WildPokemonWithServer
+type pokemonsInCellValueType = *utils.WildPokemonWithServer
 
 type ActiveCell struct {
 	pokemonCellsLevel int
@@ -31,7 +31,7 @@ func (ac *ActiveCell) GetPokemonsInCell() []utils.WildPokemonWithServer {
 	ac.cellMutex.RLock()
 	var wildPokemons []utils.WildPokemonWithServer
 	ac.wildPokemons.Range(func(_, pokemon interface{}) bool {
-		wildPokemons = append(wildPokemons, pokemon.(PokemonsInCellValueType))
+		wildPokemons = append(wildPokemons, *pokemon.(pokemonsInCellValueType))
 		return true
 	})
 	ac.cellMutex.RUnlock()
@@ -46,6 +46,27 @@ func (ac *ActiveCell) RemovePokemon(wildPokemon utils.WildPokemonWithServer) (ok
 	}
 	ac.cellMutex.RUnlock()
 	return ok
+}
+
+func (ac *ActiveCell) ExistsPokemon(wildPokemon utils.WildPokemonWithServer) (ok bool) {
+	ac.cellMutex.RLock()
+	pokemonCell := s2.CellIDFromLatLng(wildPokemon.Location)
+	_, ok = ac.wildPokemons.Load(pokemonCell)
+	ac.cellMutex.RUnlock()
+	return ok
+}
+
+func (ac *ActiveCell) GetPokemon(wildPokemon utils.WildPokemonWithServer) (*utils.WildPokemonWithServer, bool) {
+	ac.cellMutex.RLock()
+	pokemonCell := s2.CellIDFromLatLng(wildPokemon.Location)
+	pokemon, ok := ac.wildPokemons.Load(pokemonCell)
+	ac.cellMutex.RUnlock()
+	if ok {
+		toReturn := pokemon.(pokemonsInCellValueType)
+		return toReturn, ok
+	} else {
+		return nil, ok
+	}
 }
 
 func (ac *ActiveCell) AddPokemons(wildPokemons []utils.WildPokemonWithServer) {

@@ -233,9 +233,10 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if queryServerName == serverName {
-		toSend := make(map[s2.CellID]int32)
-		cm.nrTrainersInCell.Range(func(cellId, nrTrainers interface{}) bool {
-			toSend[cellId.(s2.CellID)] = atomic.LoadInt32(nrTrainers.(nrTrainersInCellValueType))
+		toSend := make(map[s2.CellID]ActiveCell)
+		cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
+			activeCell := activeCellValue.(activeCellsValueType)
+			toSend[cellId.(s2.CellID)] = activeCell
 			return true
 		})
 	}
@@ -479,7 +480,7 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 	}
 	cm.cellsOwnedLock.RUnlock()
 
-	pokemon, err := cm.RemoveWildPokemonFromCell(pokemonCell, catchPokemonMsg.WildPokemon.Pokemon.Id.Hex())
+	toCatch, err := cm.GetPokemon(pokemonCell, catchPokemonMsg.WildPokemon)
 	if err != nil {
 		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
 			Error: wrapCatchWildPokemonError(err).Error(),
@@ -491,7 +492,7 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 		}
 		return nil
 	}
-
+	pokemon := toCatch.Pokemon
 	var catchingProbability float64
 	if pokeball.Effect.Value == maxCatchingProbability {
 		catchingProbability = 1
@@ -505,7 +506,7 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 	var pokemonTokens []string
 	if caught {
 		var trainersClient = clients.NewTrainersClient(httpClient)
-		_, err = trainersClient.AddPokemonToTrainer(user, *pokemon)
+		_, err = trainersClient.AddPokemonToTrainer(user, pokemon)
 		if err != nil {
 
 			msgBytes := []byte(location.CatchWildPokemonMessageResponse{

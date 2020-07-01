@@ -5,11 +5,9 @@ import (
 	"math/rand"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/NOVAPokemon/utils"
-	"github.com/NOVAPokemon/utils/pokemons"
 	"github.com/golang/geo/s1"
 	"github.com/golang/geo/s2"
 	log "github.com/sirupsen/logrus"
@@ -89,43 +87,15 @@ func NewCellManager(gyms []utils.GymWithServer, config *LocationServerConfig) *C
 	return toReturn
 }
 
-func (cm *CellManager) logActiveGymsPeriodic() {
-	for {
-		log.Info("Active gyms:")
-		cm.gymsInCell.Range(func(k, v interface{}) bool {
-			for _, gym := range v.(gymsFromTileValueType) {
-				log.Infof("Gym name: %s, Gym location: %+v", gym.Gym.Name, gym.Gym.Location)
-			}
-			return true
-		})
-		time.Sleep(30 * time.Second)
-	}
-}
-
 func (cm *CellManager) RemoveTrainerLocation(trainerId string) error {
-
 	tileNrsInterface, ok := cm.lastTrainerCells.Load(trainerId)
 	if !ok {
 		return errors.New("user was not being tracked")
 	}
 	tileNrs := tileNrsInterface.(trainerTilesValueType)
-
-	for i := range tileNrs {
-		if activeCellValue, ok := cm.activeCells.Load(tileNrs[i]); ok {
-			activeCell := activeCellValue.(activeCellsValueType)
-			nrTrainersInTile := activeCell.RemoveTrainer()
-			if nrTrainersInTile == 0 {
-				cm.changeTrainerCellsLock.Lock() // ensures no one else is creating or deleting the tile
-				if _, ok := cm.activeCells.Load(tileNrs[i]); ok {
-					activeCell.AcquireWriteLock()
-					cm.activeCells.Delete(tileNrs[i])
-					activeCell.ReleaseWriteLock()
-				}
-				cm.changeTrainerCellsLock.Unlock()
-			}
-		}
+	for _, cellID := range tileNrs {
+		cm.removeTrainerFromCell(cellID)
 	}
-
 	cm.lastTrainerCells.Delete(trainerId)
 	return nil
 }
@@ -163,34 +133,10 @@ func (cm *CellManager) getGymsInCells(cellIds s2.CellUnion) []utils.GymWithServe
 		if !ok {
 			continue
 		}
-
 		gymsInCells = append(gymsInCells, gymsInTileInterface.(gymsFromTileValueType)...)
 	}
 
 	return gymsInCells
-}
-
-func expandUnionToLevel(cellIds s2.CellUnion, level int) s2.CellUnion {
-	cellIdsNormalized := s2.CellUnion{}
-
-	for _, cellId := range cellIds {
-		cell := s2.CellFromCellID(cellId)
-		if cell.Level() > level {
-			cellId = cell.ID().Parent(level)
-			cellIdsNormalized = append(cellIdsNormalized, cellId)
-		} else if cell.Level() < level {
-			childrenAtLevel := s2.CellUnion{cellId}
-			childrenAtLevel.Denormalize(cm.gymsCellLevel, 1)
-
-			cellIdsNormalized = append(cellIdsNormalized, childrenAtLevel...)
-		}
-	}
-
-	if !cellIdsNormalized.IsValid() {
-		panic("cells are not valid")
-	}
-
-	return cellIdsNormalized
 }
 
 func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
@@ -241,85 +187,51 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 	}
 }
 
-func (cm *CellManager) RemoveWildPokemonFromCell(cell s2.Cell, pokemonId string) (*pokemons.Pokemon, error) {
-	value, ok := cm.PokemonInCell.Load(cell.ID())
+func (cm *CellManager) RemoveWildPokemonFromCell(activeCellID s2.Cell, toDelete utils.WildPokemonWithServer) (*utils.WildPokemonWithServer, error) {
+	activeCellInterface, ok := cm.activeCells.Load(activeCellID)
 	if !ok {
-		return nil, errors.New("cell has no pokemon")
+		return nil, errors.New("cell non existing")
 	}
+	activeCell := activeCellInterface.(ActiveCell)
 
-	pokemon := value.(PokemonsInCellValueType)
-	if pokemon.Pokemon.Id.Hex() != pokemonId {
-		return nil, errors.New("pokemon not found")
+	if activeCell.RemovePokemon(toDelete) {
+		return &toDelete, nil
 	} else {
-		cm.PokemonInCell.Delete(cell.ID())
-		return &pokemon.Pokemon, nil
+		return nil, newPokemonNotFoundError(toDelete.Pokemon.Id.Hex())
+	}
+}
+
+func (cm *CellManager) GetPokemon(activeCellID s2.Cell, pokemon utils.WildPokemonWithServer) (*utils.WildPokemonWithServer, error) {
+	activeCellInterface, ok := cm.activeCells.Load(activeCellID)
+	if !ok {
+		return nil, errors.New("cell non existing")
+	}
+	activeCell := activeCellInterface.(ActiveCell)
+
+	if pokemon, ok := activeCell.GetPokemon(pokemon); ok {
+		return pokemon, nil
+	} else {
+		return nil, newPokemonNotFoundError(pokemon.Pokemon.Id.Hex())
 	}
 }
 
 // auxiliary functions
 
 func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.CellUnion, bool, error) {
-	toRemove, toAdd, currentTiles, err := cm.calculateLocationTileChanges(trainerId, loc)
+	cellsToRemove, cellsToAdd, currentCells, err := cm.calculateLocationTileChanges(trainerId, loc)
 	if err != nil {
 		return nil, false, err
 	}
-
-	changed := len(toRemove) > 0 || len(toAdd) > 0
-
-	for i := range toRemove {
-		trainerNrsValue, ok := cm.nrTrainersInCell.Load(toRemove[i])
-		if !ok {
-			log.Warn("server was removing tile that did not have a counter")
-			continue
-		}
-
-		numTrainers := trainerNrsValue.(nrTrainersInCellValueType)
-		result := atomic.AddInt32(numTrainers, -1)
-		if result == 0 {
-			cm.changeCellsLock.Lock()
-			cm.nrTrainersInCell.Delete(toRemove[i])
-			cm.changeCellsLock.Unlock()
-			log.Warnf("Disabling tile %d", toRemove[i])
-		}
+	changed := len(cellsToRemove) > 0 || len(cellsToAdd) > 0
+	for _, cellID := range cellsToRemove {
+		cm.removeTrainerFromCell(cellID)
 	}
 
-	for i := range toAdd {
-		_, ok := cm.nrTrainersInCell.Load(toAdd[i])
-		if !ok {
-			cm.changeCellsLock.Lock()
-			_, ok = cm.nrTrainersInCell.Load(toAdd[i])
-			if ok {
-				trainerNrsValue, ok := cm.nrTrainersInCell.Load(toAdd[i])
-				if !ok {
-					panic("existing tile did not have a trainers counter")
-				}
-
-				numTrainers := trainerNrsValue.(nrTrainersInCellValueType)
-				atomic.AddInt32(numTrainers, 1)
-				cm.changeCellsLock.Unlock()
-				continue
-			}
-			var numTrainers int32 = 1
-			cm.nrTrainersInCell.Store(toAdd[i], &numTrainers)
-			cellUnion := s2.CellUnion{toAdd[i]}
-			expandUnionToLevel(cellUnion, cm.pokemonCellsLevel)
-
-			// TODO this can go to after store no?
-			cm.changeCellsLock.Unlock()
-			continue
-		} else {
-
-			trainerNrsValue, ok := cm.nrTrainersInCell.Load(toAdd[i])
-			if !ok {
-				log.Warn("existing tile did not have a trainers counter")
-				continue
-			}
-			numTrainers := trainerNrsValue.(nrTrainersInCellValueType)
-			atomic.AddInt32(numTrainers, 1)
-		}
+	for _, cellID := range cellsToAdd {
+		cm.addTrainerToCell(cellID)
 	}
-	cm.lastTrainerCells.Store(trainerId, currentTiles)
-	return currentTiles, changed, nil
+	cm.lastTrainerCells.Store(trainerId, currentCells)
+	return currentCells, changed, nil
 }
 
 func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2.LatLng) (toRemove, toAdd,
@@ -484,6 +396,56 @@ func (cm *CellManager) SetGyms(gymWithSrv []utils.GymWithServer) error {
 	return nil
 }
 
+func (cm *CellManager) logActiveGymsPeriodic() {
+	for {
+		log.Info("Active gyms:")
+		cm.gymsInCell.Range(func(k, v interface{}) bool {
+			for _, gym := range v.(gymsFromTileValueType) {
+				log.Infof("Gym name: %s, Gym location: %+v", gym.Gym.Name, gym.Gym.Location)
+			}
+			return true
+		})
+		time.Sleep(30 * time.Second)
+	}
+}
+
+func (cm *CellManager) removeTrainerFromCell(cellID s2.CellID) {
+	if activeCellValue, ok := cm.activeCells.Load(cellID); ok {
+		activeCell := activeCellValue.(activeCellsValueType)
+		nrTrainersInTile := activeCell.RemoveTrainer()
+		if nrTrainersInTile == 0 {
+			cm.changeTrainerCellsLock.Lock() // ensures no one else is creating or deleting the tile
+			if cellValue, ok := cm.activeCells.Load(cellID); ok {
+				cell := cellValue.(activeCellsValueType)
+				cell.AcquireWriteLock()
+				cm.activeCells.Delete(cell.cellID)
+				cell.ReleaseWriteLock()
+			}
+			cm.changeTrainerCellsLock.Unlock()
+		}
+	}
+}
+
+func (cm *CellManager) addTrainerToCell(cellID s2.CellID) {
+	_, ok := cm.activeCells.Load(cellID)
+	if ok {
+		if activeCellValue, ok := cm.activeCells.Load(cellID); ok {
+			activeCell := activeCellValue.(activeCellsValueType)
+			activeCell.AddTrainer()
+		}
+	} else {
+		cm.changeTrainerCellsLock.Lock()
+		if activeCellValue, ok := cm.activeCells.Load(cellID); ok {
+			activeCell := activeCellValue.(activeCellsValueType)
+			activeCell.AddTrainer()
+		} else {
+			newCell := NewActiveCell(cellID, cm.pokemonCellsLevel)
+			cm.activeCells.Store(cellID, newCell)
+		}
+		cm.changeTrainerCellsLock.Unlock()
+	}
+}
+
 func convertStringsToCellIds(cellIdsStrings []string) s2.CellUnion {
 	cells := make(s2.CellUnion, len(cellIdsStrings))
 	for i, cellId := range cellIdsStrings {
@@ -494,4 +456,26 @@ func convertStringsToCellIds(cellIdsStrings []string) s2.CellUnion {
 		}
 	}
 	return cells
+}
+
+func expandUnionToLevel(cellIds s2.CellUnion, level int) s2.CellUnion {
+	cellIdsNormalized := s2.CellUnion{}
+
+	for _, cellId := range cellIds {
+		cell := s2.CellFromCellID(cellId)
+		if cell.Level() > level {
+			cellId = cell.ID().Parent(level)
+			cellIdsNormalized = append(cellIdsNormalized, cellId)
+		} else if cell.Level() < level {
+			childrenAtLevel := s2.CellUnion{cellId}
+			childrenAtLevel.Denormalize(cm.gymsCellLevel, 1)
+			cellIdsNormalized = append(cellIdsNormalized, childrenAtLevel...)
+		}
+	}
+
+	if !cellIdsNormalized.IsValid() {
+		panic("cells are not valid")
+	}
+
+	return cellIdsNormalized
 }
