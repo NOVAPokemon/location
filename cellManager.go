@@ -231,7 +231,6 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 			log.Infof("Will skip cellId %d since it already has a pokemon", randomCellId)
 		}
 
-		// TODO maybe change this to divide by percentage of cells that are active
 		nrTrainersCopy := atomic.LoadInt64(cm.totalNrTrainers)
 		sleepDuration := time.Duration(float64(config.MaxIntervalBetweenGenerations)/float64(nrTrainersCopy)) * time.Second
 		time.Sleep(sleepDuration)
