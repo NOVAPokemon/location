@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -17,10 +16,9 @@ import (
 )
 
 type (
-	gymsFromTileValueType     = []utils.GymWithServer
-	trainerTilesValueType     = s2.CellUnion
-	nrTrainersInCellValueType = *int32
-	PokemonsInCellValueType   = utils.WildPokemonWithServer
+	gymsFromTileValueType = []utils.GymWithServer
+	trainerTilesValueType = s2.CellUnion
+	activeCellsValueType = ActiveCell
 )
 
 const (
@@ -41,15 +39,15 @@ type CellManager struct {
 	gymsCellLevel     int
 	gymsRegionCoverer s2.RegionCoverer
 
-	totalNrTrainers  *int64
-	nrTrainersInCell sync.Map
-	changeCellsLock  sync.Mutex
+	totalNrTrainers *int64
 
-	trainerCells          sync.Map
+	changeTrainerCellsLock sync.Mutex
+	activeCells            sync.Map
+
+	lastTrainerCells      sync.Map
 	trainersCellsLevel    int
 	trainersRegionCoverer s2.RegionCoverer
 
-	PokemonInCell        sync.Map
 	pokemonCellsLevel    int
 	pokemonRegionCoverer s2.RegionCoverer
 }
@@ -61,8 +59,9 @@ func NewCellManager(gyms []utils.GymWithServer, config *LocationServerConfig) *C
 	}
 
 	toReturn := &CellManager{
-		nrTrainersInCell: sync.Map{},
-		trainerCells:     sync.Map{},
+		activeCells:            sync.Map{},
+		lastTrainerCells:       sync.Map{},
+		changeTrainerCellsLock: sync.Mutex{},
 		gymsRegionCoverer: s2.RegionCoverer{
 			MinLevel: config.GymsCellLevel,
 			MaxLevel: config.GymsCellLevel,
@@ -105,50 +104,48 @@ func (cm *CellManager) logActiveGymsPeriodic() {
 
 func (cm *CellManager) RemoveTrainerLocation(trainerId string) error {
 
-	tileNrInterface, ok := cm.trainerCells.Load(trainerId)
+	tileNrsInterface, ok := cm.lastTrainerCells.Load(trainerId)
 	if !ok {
 		return errors.New("user was not being tracked")
 	}
-
-	tileNrs := tileNrInterface.(trainerTilesValueType)
+	tileNrs := tileNrsInterface.(trainerTilesValueType)
 
 	for i := range tileNrs {
-		trainerNrsValue, ok := cm.nrTrainersInCell.Load(tileNrs[i])
-		if !ok {
-			panic("user left and was in tile that did not have a counter")
-		}
-
-		trainerNrs := trainerNrsValue.(nrTrainersInCellValueType)
-		result := atomic.AddInt32(trainerNrs, -1)
-		if result == 0 {
-			cm.changeCellsLock.Lock()
-			log.Warnf("no trainers in %d", tileNrs[i])
-			cm.nrTrainersInCell.Delete(tileNrs[i])
-			cm.changeCellsLock.Unlock()
+		if activeCellValue, ok := cm.activeCells.Load(tileNrs[i]); ok {
+			activeCell := activeCellValue.(activeCellsValueType)
+			nrTrainersInTile := activeCell.RemoveTrainer()
+			if nrTrainersInTile == 0 {
+				cm.changeTrainerCellsLock.Lock() // ensures no one else is creating or deleting the tile
+				if _, ok := cm.activeCells.Load(tileNrs[i]); ok {
+					activeCell.AcquireWriteLock()
+					cm.activeCells.Delete(tileNrs[i])
+					activeCell.ReleaseWriteLock()
+				}
+				cm.changeTrainerCellsLock.Unlock()
+			}
 		}
 	}
 
-	cm.trainerCells.Delete(trainerId)
+	cm.lastTrainerCells.Delete(trainerId)
 	return nil
 }
 
 func (cm *CellManager) GetTrainerTile(trainerId string) (interface{}, bool) {
-	tileNrInterface, ok := cm.trainerCells.Load(trainerId)
+	tileNrInterface, ok := cm.lastTrainerCells.Load(trainerId)
 	return tileNrInterface, ok
 }
 
 func (cm *CellManager) getPokemonsInCells(cellIds s2.CellUnion) []utils.WildPokemonWithServer {
 	var pokemonsInTiles []utils.WildPokemonWithServer
-
-	cellIdsNormalized := expandUnionToLevel(cellIds, cm.pokemonCellsLevel)
+	cellIdsNormalized := expandUnionToLevel(cellIds, cm.trainersCellsLevel)
 
 	for cellId := range cellIdsNormalized {
-		cellInterface, ok := cm.PokemonInCell.Load(cellId)
+		cellInterface, ok := cm.activeCells.Load(cellId)
 		if !ok {
 			continue
 		}
-
-		pokemonsInTiles = append(pokemonsInTiles, cellInterface.(PokemonsInCellValueType))
+		cell := cellInterface.(activeCellsValueType)
+		pokemonsInTiles = append(pokemonsInTiles, cell.GetPokemonsInCell()...)
 	}
 
 	return pokemonsInTiles
@@ -201,19 +198,15 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 
 	for {
 		// TODO change this for new struct
-		trainerCellsToObject := sync.Map{}
-		trainerCellsToObject.Range(func(trainerCellIdInterface, objectInterface interface{}) bool {
+		trainerCellsToObject := cm.activeCells
+
+		trainerCellsToObject.Range(func(trainerCellIdInterface, activeCellInterface interface{}) bool {
 			trainerCellId := trainerCellIdInterface.(s2.CellID)
 			trainerCell := s2.CellFromCellID(trainerCellId)
 
-			// TODO remove type
-			type NewType = struct{
-				lock *sync.RWMutex
-			}
+			activeCell := activeCellInterface.(ActiveCell)
 
-			object := objectInterface.(NewType)
-
-			toGenerate := object.GetNumTrainers() * config.PokemonsToGeneratePerTrainerCell
+			toGenerate := int(activeCell.GetNrTrainers()) * config.PokemonsToGeneratePerTrainerCell
 			pokemonGenerated := make([]utils.WildPokemonWithServer, toGenerate)
 			var randomCellId s2.CellID
 			for numGenerated := 0; numGenerated < toGenerate; {
@@ -221,8 +214,8 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 				centerRect := cellRect.Center()
 
 				size := cellRect.Size()
-				deltaLat := rand.Float64() * size.Lat.Degrees() * 2 - size.Lat.Degrees()
-				deltaLng := rand.Float64() * size.Lng.Degrees() * 2 - size.Lng.Degrees()
+				deltaLat := rand.Float64()*size.Lat.Degrees()*2 - size.Lat.Degrees()
+				deltaLng := rand.Float64()*size.Lng.Degrees()*2 - size.Lng.Degrees()
 
 				randomLatLng := s2.LatLngFromDegrees(centerRect.Lat.Degrees()+deltaLat,
 					centerRect.Lng.Degrees()+deltaLng)
@@ -239,9 +232,7 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 					log.Info("randomized point for pokemon generation ended up outside of boundaries")
 				}
 			}
-
-			object.AddPokemon(pokemonGenerated)
-
+			activeCell.AddPokemons(pokemonGenerated)
 			return true
 		})
 
@@ -327,7 +318,7 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 			atomic.AddInt32(numTrainers, 1)
 		}
 	}
-	cm.trainerCells.Store(trainerId, currentTiles)
+	cm.lastTrainerCells.Store(trainerId, currentTiles)
 	return currentTiles, changed, nil
 }
 
@@ -351,7 +342,7 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 	// calc cells around user for entry boundary
 	entryCellIds := cm.trainersRegionCoverer.InteriorCellUnion(s2.Region(entryTileCap))
 
-	oldCellIdsInterface, ok := cm.trainerCells.Load(trainerId)
+	oldCellIdsInterface, ok := cm.lastTrainerCells.Load(trainerId)
 	if !ok {
 		return nil, entryCellIds, entryCellIds, errors.New("")
 	}
@@ -412,12 +403,12 @@ func (cm *CellManager) LoadGyms(gyms []utils.GymWithServer) {
 /*
 func (cm *CellManager) logTileManagerState() {
 	numUsers := 0
-	cm.trainerCells.Range(func(_, _ interface{}) bool {
+	cm.lastTrainerCells.Range(func(_, _ interface{}) bool {
 		numUsers++
 		return true
 	})
 	log.Infof("Number of active users: %d", numUsers)
-	// log.Info(cm.trainerCells)
+	// log.Info(cm.lastTrainerCells)
 	counter := 0
 
 	cm..Range(func(tileNr, tileInterface interface{}) bool {
@@ -435,11 +426,11 @@ func (cm *CellManager) logTileManagerState() {
 		numTrainers := numTrainersValue.(activeTileTrainerNrValueType)
 		log.Info("Number of active users: ", numTrainers)
 		nrPokemons := 0
-		tile.pokemons.Range(func(key, value interface{}) bool {
+		tile.wildPokemons.Range(func(key, value interface{}) bool {
 			nrPokemons++
 			return true
 		})
-		log.Info("Number of generated pokemons: ", nrPokemons)
+		log.Info("Number of generated wildPokemons: ", nrPokemons)
 		return true
 	})
 	log.Infof("Number of active tiles: %d", counter)

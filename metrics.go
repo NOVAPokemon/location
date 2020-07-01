@@ -45,13 +45,13 @@ func emitNrPokemonsInTile(tileNr int, tile *Tile) {
 	if !ok {
 		gauge = promauto.NewGauge(prometheus.GaugeOpts{
 			Name: name,
-			Help: "The total number of pokemons in this tile",
+			Help: "The total number of wildPokemons in this tile",
 		})
 		tileMetrics[name] = gauge
 	}
 
 	numPokemons := 0
-	tile.pokemons.Range(func(_, _ interface{}) bool {
+	tile.wildPokemons.Range(func(_, _ interface{}) bool {
 		numPokemons++
 		return true
 	})
