@@ -239,8 +239,8 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 	exitTileCap := CalculateCapForLocation(userLoc, float64(cm.exitBoundarySize))
 
 	// calc cells around user for exit boundary
-	newExitCellIds := cm.trainersRegionCoverer.InteriorCellUnion(s2.Region(exitTileCap))
-	log.Infof("User exit region covers %d cells", newExitCellIds)
+	newExitCellIds := cm.trainersRegionCoverer.Covering(s2.Region(exitTileCap))
+	log.Infof("User exit region covers %d cells", len(newExitCellIds))
 	cm.cellsOwnedLock.RLock()
 	if !newExitCellIds.Intersects(cm.cellsOwned) {
 		cm.cellsOwnedLock.RUnlock()
@@ -252,8 +252,8 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 	entryTileCap := CalculateCapForLocation(userLoc, float64(cm.entryBoundarySize))
 
 	// calc cells around user for entry boundary
-	entryCellIds := cm.trainersRegionCoverer.InteriorCellUnion(s2.Region(entryTileCap))
-	log.Infof("User entry region covers %d cells", newExitCellIds)
+	entryCellIds := cm.trainersRegionCoverer.Covering(s2.Region(entryTileCap))
+	log.Infof("User exit region covers %d cells", len(entryCellIds))
 
 	oldCellIdsInterface, ok := cm.lastTrainerCells.Load(trainerId)
 	if !ok {
