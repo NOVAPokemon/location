@@ -12,14 +12,20 @@ func TestCellManager_calculateLocationTileChanges(t *testing.T) {
 
 	capLoc := CalculateCapForLocation(userLoc, float64(500))
 
-	trainersCellLevel := 15
+	trainersCellLevel := 18
 	trainersRegionCoverer := s2.RegionCoverer{
 		MinLevel: trainersCellLevel,
 		MaxLevel: trainersCellLevel,
 		LevelMod: 1,
 	}
 
-	newExitCellIds := trainersRegionCoverer.Covering(s2.Region(capLoc))
+	fmt.Printf("cap: %+v\n", capLoc)
+
+	newExitCellIds := trainersRegionCoverer.InteriorCellUnion(s2.Region(capLoc))
+
+	for _, cellId := range newExitCellIds {
+		fmt.Println("level: ", s2.CellFromCellID(cellId).Level())
+	}
 
 	fmt.Println(len(newExitCellIds))
 }
