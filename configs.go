@@ -8,8 +8,9 @@ type LocationServerConfig struct {
 	UpdateConfigsInterval int `json:"update_config_interval"`
 
 	// Generate configs
-	MaxIntervalBetweenGenerations int `json:"interval_generate"` // in minutes
-	PokemonCellLevel              int `json:"pokemon_cell_level"`
+	IntervalBetweenGenerations       int `json:"interval_generate"` // in minutes
+	PokemonsToGeneratePerTrainerCell int `json:"gen_poke_per_trainer_cell"`
+	PokemonCellLevel                 int `json:"pokemon_cell_level"`
 
 	GymsCellLevel int `json:"gyms_cell_level"`
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -16,10 +17,10 @@ import (
 )
 
 type (
-	gymsFromTileValueType = []utils.GymWithServer
-	trainerTilesValueType = s2.CellUnion
+	gymsFromTileValueType     = []utils.GymWithServer
+	trainerTilesValueType     = s2.CellUnion
 	nrTrainersInCellValueType = *int32
-	PokemonsInCellValueType = utils.WildPokemonWithServer
+	PokemonsInCellValueType   = utils.WildPokemonWithServer
 )
 
 const (
@@ -199,41 +200,50 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 	log.Infof("starting pokemon generation")
 
 	for {
-		inside := false
-		var randomCellId s2.CellID
-		for !inside {
-			cm.cellsOwnedLock.RLock()
-			ownedCap := cm.cellsOwned.CapBound()
-			cm.cellsOwnedLock.RUnlock()
+		// TODO change this for new struct
+		trainerCellsToObject := sync.Map{}
+		trainerCellsToObject.Range(func(trainerCellIdInterface, objectInterface interface{}) bool {
+			trainerCellId := trainerCellIdInterface.(s2.CellID)
+			trainerCell := s2.CellFromCellID(trainerCellId)
 
-			capCenter := s2.LatLngFromPoint(ownedCap.Center())
-			capRadius := ownedCap.Radius().Degrees()
-
-			deltaLat := (rand.Float64() * capRadius * 2) - capRadius
-			deltaLon := (rand.Float64() * capRadius * 2) - capRadius
-
-			randomLatLng := s2.LatLngFromDegrees(capCenter.Lat.Degrees()+deltaLat, capCenter.Lng.Degrees()+deltaLon)
-			randomCellId = s2.CellFromLatLng(randomLatLng).ID().Parent(cm.pokemonCellsLevel)
-			randomCell := s2.CellFromCellID(randomCellId)
-
-			if ownedCap.ContainsCell(randomCell) {
-				inside = true
-			} else {
-				log.Info("randomized point for pokemon generation ended up outside of boundaries")
+			// TODO remove type
+			type NewType = struct{
+				lock *sync.RWMutex
 			}
-		}
 
-		_, ok := cm.PokemonInCell.Load(randomCellId)
-		if !ok {
-			wildPokemon := generateWildPokemon(pokemonSpecies, randomCellId)
-			log.Infof("Added wild pokemon %s to cellId: %d", wildPokemon.Pokemon.Id.Hex(), randomCellId)
-			cm.PokemonInCell.Store(randomCellId, wildPokemon)
-		} else {
-			log.Infof("Will skip cellId %d since it already has a pokemon", randomCellId)
-		}
+			object := objectInterface.(NewType)
 
-		nrTrainersCopy := atomic.LoadInt64(cm.totalNrTrainers)
-		sleepDuration := time.Duration(float64(config.MaxIntervalBetweenGenerations)/float64(nrTrainersCopy)) * time.Second
+			toGenerate := object.GetNumTrainers() * config.PokemonsToGeneratePerTrainerCell
+			pokemonGenerated := make([]utils.WildPokemonWithServer, toGenerate)
+			var randomCellId s2.CellID
+			for numGenerated := 0; numGenerated < toGenerate; {
+				cellRect := trainerCell.RectBound()
+				centerRect := cellRect.Center()
+
+				size := cellRect.Size()
+				deltaLat := rand.Float64() * size.Lat.Degrees() * 2 - size.Lat.Degrees()
+				deltaLng := rand.Float64() * size.Lng.Degrees() * 2 - size.Lng.Degrees()
+
+				randomLatLng := s2.LatLngFromDegrees(centerRect.Lat.Degrees()+deltaLat,
+					centerRect.Lng.Degrees()+deltaLng)
+
+				randomCell := s2.CellFromCellID(randomCellId)
+				randomCellId = s2.CellFromLatLng(randomLatLng).ID().Parent(cm.pokemonCellsLevel)
+
+				if trainerCell.ContainsCell(randomCell) {
+					numGenerated++
+					wildPokemon := generateWildPokemon(pokemonSpecies, randomCellId)
+					log.Infof("Added wild pokemon %s to cellId: %d", wildPokemon.Pokemon.Id.Hex(), randomCellId)
+					pokemonGenerated = append(pokemonGenerated, wildPokemon)
+				} else {
+					log.Info("randomized point for pokemon generation ended up outside of boundaries")
+				}
+			}
+
+			return true
+		})
+
+		sleepDuration := time.Duration(float64(config.IntervalBetweenGenerations)) * time.Second
 		time.Sleep(sleepDuration)
 	}
 }
