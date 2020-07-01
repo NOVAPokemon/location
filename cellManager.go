@@ -80,7 +80,8 @@ func NewCellManager(gyms []utils.GymWithServer, config *LocationServerConfig) *C
 			LevelMod: 1,
 			MaxCells: maxCells,
 		},
-		cellsOwned: s2.CellUnion{},
+		cellsOwned:      s2.CellUnion{},
+		totalNrTrainers: new(int64),
 	}
 
 	toReturn.LoadGyms(gyms)
