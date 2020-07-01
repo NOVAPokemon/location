@@ -232,10 +232,8 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 		}
 
 		// TODO maybe change this to divide by percentage of cells that are active
-		cm.changeCellsLock.Lock()
 		nrTrainersCopy := atomic.LoadInt64(cm.totalNrTrainers)
 		sleepDuration := time.Duration(float64(config.MaxIntervalBetweenGenerations)/float64(nrTrainersCopy)) * time.Second
-		cm.changeCellsLock.Unlock()
 		time.Sleep(sleepDuration)
 	}
 }
