@@ -296,8 +296,9 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 		close(inChan)
 
 		clientChannels.Delete(user)
+		atomic.AddInt64(cm.totalNrTrainers, -1)
 	}()
-
+	atomic.AddInt64(cm.totalNrTrainers, 1)
 	var pingTicker = time.NewTicker(time.Duration(config.Ping) * time.Second)
 	for {
 		select {
