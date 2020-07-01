@@ -50,7 +50,7 @@ type CellManager struct {
 	pokemonRegionCoverer s2.RegionCoverer
 }
 
-func NewCellManager(gyms []utils.GymWithServer, config *LocationServerConfig) *CellManager {
+func NewCellManager(gyms []utils.GymWithServer, config *LocationServerConfig, cellsOwned s2.CellUnion) *CellManager {
 
 	if config.GymsCellLevel > config.PokemonCellLevel {
 		panic("invalid configs")
@@ -78,7 +78,7 @@ func NewCellManager(gyms []utils.GymWithServer, config *LocationServerConfig) *C
 			LevelMod: 1,
 			MaxCells: maxCells,
 		},
-		cellsOwned:      s2.CellUnion{},
+		cellsOwned:      cellsOwned,
 		totalNrTrainers: new(int64),
 	}
 
@@ -240,9 +240,9 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 
 	// calc cells around user for exit boundary
 	newExitCellIds := cm.trainersRegionCoverer.InteriorCellUnion(s2.Region(exitTileCap))
-
+	log.Infof("User exit region covers %d cells", newExitCellIds)
 	cm.cellsOwnedLock.RLock()
-	if !cm.cellsOwned.Intersects(newExitCellIds) {
+	if !newExitCellIds.Intersects(cm.cellsOwned) {
 		cm.cellsOwnedLock.RUnlock()
 		return nil, nil, nil,
 			errors.New("server cells do not intersect client exit boundaries")
@@ -253,6 +253,7 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 
 	// calc cells around user for entry boundary
 	entryCellIds := cm.trainersRegionCoverer.InteriorCellUnion(s2.Region(entryTileCap))
+	log.Infof("User entry region covers %d cells", newExitCellIds)
 
 	oldCellIdsInterface, ok := cm.lastTrainerCells.Load(trainerId)
 	if !ok {

@@ -89,9 +89,10 @@ func init() {
 
 			log.Infof("Loaded config: %+v", serverConfig)
 
-			cm = NewCellManager(gyms, config)
-			go cm.generateWildPokemonsForServerPeriodically()
+			cells := convertStringsToCellIds(serverConfig.CellIdsStrings)
+			cm = NewCellManager(gyms, config, cells)
 
+			go cm.generateWildPokemonsForServerPeriodically()
 			go RefreshBoundariesPeriodic()
 			go refreshGymsPeriodic()
 			return
@@ -500,7 +501,6 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 		catchingProbability = 1 - ((float64(pokemon.Level) / config.MaxLevel) *
 			(float64(pokeball.Effect.Value) / maxCatchingProbability))
 	}
-
 	log.Info("catching probability: ", catchingProbability)
 	caught := rand.Float64() <= catchingProbability
 	var pokemonTokens []string
@@ -654,7 +654,6 @@ func HandleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	cellIds := convertStringsToCellIds(serverConfig.CellIdsStrings)
 	cm.SetServerCells(cellIds)
 }
