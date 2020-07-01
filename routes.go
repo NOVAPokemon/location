@@ -14,6 +14,7 @@ const GetGlobalRegionConfigName = "GET_GLOBAL_SERVER_CONFIG"
 const GetServerForLocationName = "GET_SERVER_FOR_LOCATION"
 const SetServerConfigsName = "SET_SERVER_CONFIG"
 const ForceLoadConfigName = "RELOAD_SERVER_CONFIG"
+const GetActiveCells = "GET_ACTIVE_CELLS"
 
 const GET = "GET"
 const POST = "POST"
@@ -61,5 +62,12 @@ var routes = utils.Routes{
 		Method:      GET,
 		Pattern:     api.ForceLoadConfigRoute,
 		HandlerFunc: HandleForceLoadConfig,
+	},
+
+	utils.Route{
+		Name:        GetActiveCells,
+		Method:      GET,
+		Pattern:     api.GetActiveTiles,
+		HandlerFunc: HandleGetActiveCells,
 	},
 }

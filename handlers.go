@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -201,6 +202,46 @@ func HandleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 
 	cellIds := convertStringsToCellIds(config.CellIdsStrings)
 	cm.SetServerCells(cellIds)
+}
+
+// Debug method to check if world is well subdivided
+func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
+	queryServerName := r.FormValue(api.GetActiveTilesRoute)
+	toSend := make(map[s2.CellID]int32)
+	if queryServerName == "*" {
+		serverConfigs, err := locationdb.GetAllServerConfigs()
+		if err != nil {
+			panic(err)
+		}
+		for serverName, _ := range serverConfigs {
+			u := url.URL{Scheme: "http", Host: serverName, Path: fmt.Sprintf(api.GetServerForLocationPath)}
+			q := u.Query()
+			q.Set(api.ServerNamePathVar, serverName)
+			resp, err := http.Get(u.String())
+			if err != nil {
+				panic(err)
+			}
+			respDecoded := map[s2.CellID]int32{}
+			err = json.NewDecoder(resp.Body).Decode(&respDecoded)
+			if err != nil {
+				panic(err)
+			}
+			for cellNr, trainerNr := range respDecoded {
+				toSend[cellNr] = trainerNr
+			}
+		}
+	}
+
+	if queryServerName == serverName {
+		toSend := make(map[s2.CellID]int32)
+		cm.nrTrainersInCell.Range(func(cellId, nrTrainers interface{}) bool {
+			toSend[cellId.(s2.CellID)] = atomic.LoadInt32(nrTrainers.(nrTrainersInCellValueType))
+			return true
+		})
+	}
+	if toWrite, err := json.Marshal(toSend); err == nil {
+		_, _ = w.Write(toWrite)
+	}
 }
 
 func HandleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
