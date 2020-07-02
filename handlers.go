@@ -551,16 +551,20 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 
 	currCells, changed, err := cm.UpdateTrainerTiles(user, locationMsg.Location)
 	if err != nil {
-		return err
+		return wrapHandleLocationMsgs(err)
 	}
+
+	log.Infof("User %s is on cells: %+v", currCells)
 
 	cellsPerServer, err := getServersForCells(currCells...)
 	if err != nil {
-		return err
+		return wrapHandleLocationMsgs(err)
 	}
 
 	if changed {
 		var serverNames []string
+		log.Infof("User %s got cellsPerServer: %+v", user, serverNames)
+
 		for serverName := range cellsPerServer {
 			serverNames = append(serverNames, serverName)
 		}
@@ -614,6 +618,7 @@ func answerToLocationMsg(channel chan<- ws.GenericMsg, cellsPerServer map[string
 	gymsInVicinity := cm.getGymsInCells(cells)
 	pokemonInVicinity := cm.getPokemonsInCells(cells)
 
+	log.Info("Sending reply to channel")
 	channel <- ws.GenericMsg{
 		MsgType: websocket.TextMessage,
 		Data:    []byte(location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()),
@@ -625,6 +630,7 @@ func answerToLocationMsg(channel chan<- ws.GenericMsg, cellsPerServer map[string
 			Pokemon: pokemonInVicinity,
 		}.SerializeToWSMessage().Serialize()),
 	}
+	log.Info("done")
 
 	return nil
 }
@@ -638,11 +644,10 @@ func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
 	servers := map[string]s2.CellUnion{}
 	for serverName, config := range configs {
 		cellIds := convertStringsToCellIds(config.CellIdsStrings)
-
-		for _, cell := range cells {
-			if cellIds.ContainsCellID(cell) {
+		for _, cellID := range cells {
+			if cellIds.ContainsCellID(cellID) {
 				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
-				servers[serverAddr] = append(servers[serverAddr], cell)
+				servers[serverAddr] = append(servers[serverAddr], cellID)
 			}
 		}
 	}

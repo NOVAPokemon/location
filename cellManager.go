@@ -224,10 +224,12 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 	}
 	changed := len(cellsToRemove) > 0 || len(cellsToAdd) > 0
 	for _, cellID := range cellsToRemove {
+		log.Infof("User %s left cell %d", trainerId, cellID)
 		cm.removeTrainerFromCell(cellID)
 	}
 
 	for _, cellID := range cellsToAdd {
+		log.Infof("User %s joined cell %d", trainerId, cellID)
 		cm.addTrainerToCell(cellID)
 	}
 	cm.lastTrainerCells.Store(trainerId, currentCells)
@@ -248,12 +250,11 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 			errors.New("server cells do not intersect client exit boundaries")
 	}
 	cm.cellsOwnedLock.RUnlock()
-
 	entryTileCap := CalculateCapForLocation(userLoc, float64(cm.entryBoundarySize))
 
 	// calc cells around user for entry boundary
 	entryCellIds := cm.trainersRegionCoverer.Covering(s2.Region(entryTileCap))
-	log.Infof("User exit region covers %d cells", len(entryCellIds))
+	log.Infof("User entry region covers %d cells", len(entryCellIds))
 
 	oldCellIdsInterface, ok := cm.lastTrainerCells.Load(trainerId)
 	if !ok {
@@ -280,8 +281,9 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 }
 
 func CalculateCapForLocation(latLon s2.LatLng, boundarySize float64) s2.Cap {
+	point := s2.PointFromLatLng(latLon)
 	angle := s1.Angle(boundarySize / EarthRadiusInMeter)
-	return s2.CapFromCenterAngle(s2.PointFromLatLng(latLon), angle)
+	return s2.CapFromCenterAngle(point, angle)
 }
 
 func (cm *CellManager) LoadGyms(gyms []utils.GymWithServer) {
