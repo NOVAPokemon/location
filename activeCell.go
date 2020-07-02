@@ -18,8 +18,9 @@ type ActiveCell struct {
 }
 
 func NewActiveCell(id s2.CellID, pokemonCellsLevel int) *ActiveCell {
+	var nrTrainers int64 = 0
 	return &ActiveCell{
-		nrTrainers:        new(int64),
+		nrTrainers:        &nrTrainers,
 		wildPokemons:      &sync.Map{},
 		cellID:            id,
 		cellMutex:         &sync.RWMutex{},
@@ -80,28 +81,20 @@ func (ac *ActiveCell) AddPokemons(wildPokemons []utils.WildPokemonWithServer) {
 
 // TODO is this lock necessary
 func (ac *ActiveCell) RemoveTrainer() int64 {
-	ac.cellMutex.RLock()
-	defer ac.cellMutex.RUnlock()
 	return atomic.AddInt64(ac.nrTrainers, -1)
 }
 
 // TODO is this lock necessary
 func (ac *ActiveCell) AddTrainer() int64 {
-	ac.cellMutex.RLock()
-	defer ac.cellMutex.RUnlock()
 	return atomic.AddInt64(ac.nrTrainers, 1)
 }
 
 // TODO is this lock necessary
 func (ac *ActiveCell) GetNrTrainers() int64 {
-	ac.cellMutex.RLock()
-	defer ac.cellMutex.RUnlock()
 	return atomic.LoadInt64(ac.nrTrainers)
 }
 
 func (ac *ActiveCell) AcquireReadLock() {
-	ac.cellMutex.RLock()
-	defer ac.cellMutex.RUnlock()
 	ac.cellMutex.RLock()
 }
 

@@ -20,7 +20,7 @@ type (
 )
 
 const (
-	EarthRadiusInMeter = 6378000
+	EarthRadiusInMeter = 6371000
 	maxCells           = 1000
 )
 
@@ -149,6 +149,7 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 			trainerCell := s2.CellFromCellID(trainerCellId)
 			activeCell := activeCellInterface.(activeCellsValueType)
 			toGenerate := int(activeCell.GetNrTrainers()) * config.PokemonsToGeneratePerTrainerCell
+			log.Info("Generating %d pokemons for cell %d", toGenerate, activeCell.cellID)
 			pokemonGenerated := make([]utils.WildPokemonWithServer, toGenerate)
 			var randomCellId s2.CellID
 			for numGenerated := 0; numGenerated < toGenerate; {
@@ -174,10 +175,14 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 					log.Info("randomized point for pokemon generation ended up outside of boundaries")
 				}
 			}
-			activeCell.AddPokemons(pokemonGenerated)
+			activeCell.AcquireReadLock()
+			if activeCellInterface, ok := cm.activeCells.Load(activeCell.cellID); ok {
+				activeCell := activeCellInterface.(activeCellsValueType)
+				activeCell.AddPokemons(pokemonGenerated)
+			}
+			activeCell.ReleaseReadLock()
 			return true
 		})
-
 		sleepDuration := time.Duration(float64(config.IntervalBetweenGenerations)) * time.Second
 		time.Sleep(sleepDuration)
 	}
@@ -410,13 +415,17 @@ func (cm *CellManager) logActiveGymsPeriodic() {
 func (cm *CellManager) removeTrainerFromCell(cellID s2.CellID) {
 	if activeCellValue, ok := cm.activeCells.Load(cellID); ok {
 		activeCell := activeCellValue.(activeCellsValueType)
-		nrTrainersInTile := activeCell.RemoveTrainer()
+		var nrTrainersInTile int64
+		activeCell = activeCellValue.(activeCellsValueType)
+		nrTrainersInTile = activeCell.RemoveTrainer()
 		if nrTrainersInTile == 0 {
 			cm.changeTrainerCellsLock.Lock() // ensures no one else is creating or deleting the tile
 			if cellValue, ok := cm.activeCells.Load(cellID); ok {
 				cell := cellValue.(activeCellsValueType)
 				cell.AcquireWriteLock()
-				cm.activeCells.Delete(cell.cellID)
+				if cell.GetNrTrainers() == 0 { // assure no other user incremented in the meantime
+					cm.activeCells.Delete(cell.cellID)
+				}
 				cell.ReleaseWriteLock()
 			}
 			cm.changeTrainerCellsLock.Unlock()
@@ -425,19 +434,28 @@ func (cm *CellManager) removeTrainerFromCell(cellID s2.CellID) {
 }
 
 func (cm *CellManager) addTrainerToCell(cellID s2.CellID) {
-	_, ok := cm.activeCells.Load(cellID)
+	activeCellValue, ok := cm.activeCells.Load(cellID)
 	if ok {
+		activeCell := activeCellValue.(activeCellsValueType)
+		activeCell.AcquireReadLock()
 		if activeCellValue, ok := cm.activeCells.Load(cellID); ok {
 			activeCell := activeCellValue.(activeCellsValueType)
 			activeCell.AddTrainer()
+		} else { // cell was deleted in the meantime, try to add again
+			activeCell.ReleaseReadLock()
+			cm.addTrainerToCell(cellID)
+			return
 		}
+		activeCell.ReleaseReadLock()
 	} else {
 		cm.changeTrainerCellsLock.Lock()
 		if activeCellValue, ok := cm.activeCells.Load(cellID); ok {
+			// cell was added in the meantime, and no other thread can remove/add in the meantime, so no need to acquire read lock
 			activeCell := activeCellValue.(activeCellsValueType)
 			activeCell.AddTrainer()
 		} else {
 			newCell := NewActiveCell(cellID, cm.pokemonCellsLevel)
+			newCell.AddTrainer()
 			cm.activeCells.Store(cellID, *newCell)
 		}
 		cm.changeTrainerCellsLock.Unlock()
