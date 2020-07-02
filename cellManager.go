@@ -151,7 +151,6 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 			toGenerate := int(activeCell.GetNrTrainers()) * config.PokemonsToGeneratePerTrainerCell
 			log.Infof("Generating %d pokemons for cell %d", toGenerate, activeCell.cellID)
 			pokemonGenerated := make([]utils.WildPokemonWithServer, toGenerate)
-			var randomCellId s2.CellID
 			for numGenerated := 0; numGenerated < toGenerate; {
 				cellRect := trainerCell.RectBound()
 				log.Infof("rectangle bounds : %+v", cellRect)
@@ -161,7 +160,7 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 					Lat: s1.Angle(randLat),
 					Lng: s1.Angle(randLng),
 				}
-				randomCellId = s2.CellFromLatLng(randomLatLng).ID().Parent(cm.pokemonCellsLevel)
+				randomCellId := s2.CellFromLatLng(randomLatLng).ID().Parent(cm.pokemonCellsLevel)
 				randomCell := s2.CellFromCellID(randomCellId)
 				if trainerCell.ContainsCell(randomCell) {
 					numGenerated++
@@ -169,7 +168,8 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 					log.Infof("Added wild pokemon %s to cellId: %d", wildPokemon.Pokemon.Id.Hex(), randomCellId)
 					pokemonGenerated = append(pokemonGenerated, wildPokemon)
 				} else {
-					log.Info("randomized point for pokemon generation ended up outside of boundaries")
+					log.Infof("randomized point (%f, %f) for pokemon generation ended up outside of boundaries %v",
+						randomLatLng.Lat.Degrees(), randomLatLng.Lng.Degrees(), cellRect)
 				}
 			}
 			activeCell.AcquireReadLock()
