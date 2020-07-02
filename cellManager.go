@@ -16,7 +16,7 @@ import (
 type (
 	gymsFromTileValueType = []utils.GymWithServer
 	trainerTilesValueType = s2.CellUnion
-	activeCellsValueType = ActiveCell
+	activeCellsValueType  = ActiveCell
 )
 
 const (
@@ -57,32 +57,37 @@ func NewCellManager(gyms []utils.GymWithServer, config *LocationServerConfig, ce
 	}
 
 	toReturn := &CellManager{
-		activeCells:            sync.Map{},
-		lastTrainerCells:       sync.Map{},
-		changeTrainerCellsLock: sync.Mutex{},
+		pokemonSpecies:    []string{},
+		entryBoundarySize: config.EntryBoundaryLevel,
+		exitBoundarySize:  config.ExitBoundaryLevel,
+		cellsOwned:        cellsOwned,
+		cellsOwnedLock:    sync.RWMutex{},
+		gymsInCell:        sync.Map{},
+		gymsCellLevel:     config.GymsCellLevel,
 		gymsRegionCoverer: s2.RegionCoverer{
 			MinLevel: config.GymsCellLevel,
 			MaxLevel: config.GymsCellLevel,
 			LevelMod: 1,
 			MaxCells: maxCells,
 		},
-		pokemonRegionCoverer: s2.RegionCoverer{
-			MinLevel: config.PokemonCellLevel,
-			MaxLevel: config.PokemonCellLevel,
-			LevelMod: 1,
-			MaxCells: maxCells,
-		},
+		totalNrTrainers:        new(int64),
+		changeTrainerCellsLock: sync.Mutex{},
+		activeCells:            sync.Map{},
+		lastTrainerCells:       sync.Map{},
+		trainersCellsLevel:     config.TrainersCellLevel,
 		trainersRegionCoverer: s2.RegionCoverer{
 			MinLevel: config.TrainersCellLevel,
 			MaxLevel: config.TrainersCellLevel,
 			LevelMod: 1,
 			MaxCells: maxCells,
 		},
-		trainersCellsLevel: config.TrainersCellLevel,
 		pokemonCellsLevel: config.PokemonCellLevel,
-		gymsCellLevel: config.GymsCellLevel,
-		cellsOwned:      cellsOwned,
-		totalNrTrainers: new(int64),
+		pokemonRegionCoverer: s2.RegionCoverer{
+			MinLevel: config.PokemonCellLevel,
+			MaxLevel: config.PokemonCellLevel,
+			LevelMod: 1,
+			MaxCells: maxCells,
+		},
 	}
 
 	toReturn.LoadGyms(gyms)
