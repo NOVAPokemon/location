@@ -13,16 +13,16 @@ type ActiveCell struct {
 	pokemonCellsLevel int
 	cellID            s2.CellID
 	nrTrainers        *int64
-	wildPokemons      sync.Map
-	cellMutex         sync.RWMutex
+	wildPokemons      *sync.Map
+	cellMutex         *sync.RWMutex
 }
 
 func NewActiveCell(id s2.CellID, pokemonCellsLevel int) *ActiveCell {
 	return &ActiveCell{
 		nrTrainers:        new(int64),
-		wildPokemons:      sync.Map{},
+		wildPokemons:      &sync.Map{},
 		cellID:            id,
-		cellMutex:         sync.RWMutex{},
+		cellMutex:         &sync.RWMutex{},
 		pokemonCellsLevel: pokemonCellsLevel,
 	}
 }
