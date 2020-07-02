@@ -442,7 +442,7 @@ func (cm *CellManager) addTrainerToCell(cellID s2.CellID) {
 			activeCell.AddTrainer()
 		} else {
 			newCell := NewActiveCell(cellID, cm.pokemonCellsLevel)
-			cm.activeCells.Store(cellID, newCell)
+			cm.activeCells.Store(cellID, *newCell)
 		}
 		cm.changeTrainerCellsLock.Unlock()
 	}
