@@ -100,7 +100,11 @@ func (cm *CellManager) RemoveTrainerLocation(trainerId string) error {
 	if !ok {
 		return errors.New("user was not being tracked")
 	}
+
 	tileNrs := tileNrsInterface.(trainerTilesValueType)
+
+	log.Infof("will try to cleanup %v", tileNrs)
+
 	for _, cellID := range tileNrs {
 		cm.removeTrainerFromCell(cellID)
 	}
