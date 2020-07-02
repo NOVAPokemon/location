@@ -154,15 +154,10 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 			var randomCellId s2.CellID
 			for numGenerated := 0; numGenerated < toGenerate; {
 				cellRect := trainerCell.RectBound()
-				centerRect := cellRect.Center()
-
-				size := cellRect.Size()
-				deltaLat := rand.Float64()*size.Lat.Degrees()*2 - size.Lat.Degrees()
-				deltaLng := rand.Float64()*size.Lng.Degrees()*2 - size.Lng.Degrees()
-
-				randomLatLng := s2.LatLngFromDegrees(centerRect.Lat.Degrees()+deltaLat,
-					centerRect.Lng.Degrees()+deltaLng)
-
+				log.Info("rectangle bounds : %+v", cellRect)
+				randLat := cellRect.Lat.Lo + (cellRect.Lat.Hi-cellRect.Lat.Lo)*rand.Float64()
+				randLng := cellRect.Lng.Lo + (cellRect.Lng.Hi-cellRect.Lng.Lo)*rand.Float64()
+				randomLatLng := s2.LatLngFromDegrees(randLat, randLng)
 				randomCell := s2.CellFromCellID(randomCellId)
 				randomCellId = s2.CellFromLatLng(randomLatLng).ID().Parent(cm.pokemonCellsLevel)
 
