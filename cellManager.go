@@ -234,7 +234,6 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 	}
 
 	for _, cellID := range cellsToAdd {
-		log.Infof("User %s joined cell %d", trainerId, cellID)
 		cm.addTrainerToCell(cellID)
 	}
 	cm.lastTrainerCells.Store(trainerId, currentCells)
