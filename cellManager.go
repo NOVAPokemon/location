@@ -236,6 +236,7 @@ func (cm *CellManager) UpdateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 	for _, cellID := range cellsToAdd {
 		cm.addTrainerToCell(cellID)
 	}
+
 	cm.lastTrainerCells.Store(trainerId, currentCells)
 	return currentCells, changed, nil
 }
@@ -493,10 +494,6 @@ func expandUnionToLevel(cellIds s2.CellUnion, level int) s2.CellUnion {
 			childrenAtLevel.Denormalize(cm.gymsCellLevel, 1)
 			cellIdsNormalized = append(cellIdsNormalized, childrenAtLevel...)
 		}
-	}
-
-	if !cellIdsNormalized.IsValid() {
-		panic("cells are not valid")
 	}
 
 	return cellIdsNormalized
