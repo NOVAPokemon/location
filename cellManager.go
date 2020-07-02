@@ -144,14 +144,10 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 
 	for {
 		// TODO change this for new struct
-		trainerCellsToObject := cm.activeCells
-
-		trainerCellsToObject.Range(func(trainerCellIdInterface, activeCellInterface interface{}) bool {
+		cm.activeCells.Range(func(trainerCellIdInterface, activeCellInterface interface{}) bool {
 			trainerCellId := trainerCellIdInterface.(s2.CellID)
 			trainerCell := s2.CellFromCellID(trainerCellId)
-
-			activeCell := activeCellInterface.(ActiveCell)
-
+			activeCell := activeCellInterface.(activeCellsValueType)
 			toGenerate := int(activeCell.GetNrTrainers()) * config.PokemonsToGeneratePerTrainerCell
 			pokemonGenerated := make([]utils.WildPokemonWithServer, toGenerate)
 			var randomCellId s2.CellID
