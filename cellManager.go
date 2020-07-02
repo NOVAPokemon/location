@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -143,7 +144,6 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 	log.Infof("starting pokemon generation")
 
 	for {
-		// TODO change this for new struct
 		cm.activeCells.Range(func(trainerCellIdInterface, activeCellInterface interface{}) bool {
 			trainerCellId := trainerCellIdInterface.(s2.CellID)
 			trainerCell := s2.CellFromCellID(trainerCellId)
@@ -162,6 +162,9 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 				}
 				randomCellId := s2.CellFromLatLng(randomLatLng).ID().Parent(cm.pokemonCellsLevel)
 				randomCell := s2.CellFromCellID(randomCellId)
+
+				fmt.Printf("checking if cell %d contains cell %d\n", trainerCell.ID(), randomCell.ID())
+
 				if trainerCell.ContainsCell(randomCell) {
 					numGenerated++
 					wildPokemon := generateWildPokemon(pokemonSpecies, randomCellId)
