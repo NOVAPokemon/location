@@ -427,11 +427,13 @@ func (cm *CellManager) removeTrainerFromCell(cellID s2.CellID) {
 					cm.activeCells.Delete(cell.cellID)
 				}
 				cell.ReleaseWriteLock()
+			} else {
+				panic("Tried to delete a cell that was deleted in the meantime, which shouldn't happen")
 			}
 			cm.changeTrainerCellsLock.Unlock()
 		}
 	} else {
-		panic("Tried to delete a cell that was already deleted")
+		panic("Tried to delete a cell that was deleted in the meantime, which shouldn't happen")
 	}
 }
 
