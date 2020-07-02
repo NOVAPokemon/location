@@ -611,7 +611,7 @@ func handleUpdateLocationWithTilesMsg(user string, msg *ws.Message, channel chan
 func answerToLocationMsg(channel chan<- ws.GenericMsg, cellsPerServer map[string]s2.CellUnion, myServer string) error {
 	cells := cellsPerServer[myServer]
 
-	if len(cells) > 0 {
+	if len(cells) == 0 {
 		return errors.New("user contacted server that isnt responsible for any tile")
 	}
 

@@ -430,6 +430,8 @@ func (cm *CellManager) removeTrainerFromCell(cellID s2.CellID) {
 			}
 			cm.changeTrainerCellsLock.Unlock()
 		}
+	} else {
+		panic("Tried to delete a cell that was already deleted")
 	}
 }
 
