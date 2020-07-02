@@ -163,6 +163,7 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 				randomCellId := s2.CellFromLatLng(randomLatLng).ID().Parent(cm.pokemonCellsLevel)
 				randomCell := s2.CellFromCellID(randomCellId)
 
+				fmt.Printf("level: %d\n", cm.pokemonCellsLevel)
 				fmt.Printf("checking if cell %d contains cell %d\n", trainerCell.ID(), randomCell.ID())
 
 				if trainerCell.ContainsCell(randomCell) {
