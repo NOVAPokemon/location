@@ -257,25 +257,24 @@ func (cm *CellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 	log.Infof("User entry region covers %d cells", len(entryCellIds))
 
 	oldCellIdsInterface, ok := cm.lastTrainerCells.Load(trainerId)
-	if !ok {
-		return nil, entryCellIds, entryCellIds, errors.New("")
+	var oldCellIds trainerTilesValueType
+	if ok {
+		oldCellIds = oldCellIdsInterface.(trainerTilesValueType)
+	} else {
+		oldCellIds = s2.CellUnion{}
 	}
-
-	oldCellIds := oldCellIdsInterface.(trainerTilesValueType)
 
 	// calc diff from  old cells to new exit boundary to find which cells to remove
 	toRemove = s2.CellUnionFromDifference(oldCellIds, newExitCellIds)
 
-	// calc diff from new entry cells to old cells to find which cells to add
+	// calc which cells to add by obtaining the difference between the new cells against the old ones
 	toAdd = s2.CellUnionFromDifference(entryCellIds, oldCellIds)
 
-	// calculates which cells user was on
+	// discard cells which are not in the new exit boundary
 	cellsToKeep := s2.CellUnionFromIntersection(newExitCellIds, oldCellIds)
 
 	// adds tiles to keep and new tiles to load in orded to return which cells user should load
 	currentTiles = s2.CellUnionFromUnion(toAdd, cellsToKeep)
-
-	// TODO normalize cells to trainers level?
 
 	return toRemove, toAdd, currentTiles, nil
 }
