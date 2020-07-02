@@ -1,10 +1,11 @@
 package main
 
 import (
-	"github.com/NOVAPokemon/utils"
-	"github.com/golang/geo/s2"
 	"sync"
 	"sync/atomic"
+
+	"github.com/NOVAPokemon/utils"
+	"github.com/golang/geo/s2"
 )
 
 type pokemonsInCellValueType = *utils.WildPokemonWithServer
