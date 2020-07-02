@@ -158,9 +158,8 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 				randLat := cellRect.Lat.Lo + (cellRect.Lat.Hi-cellRect.Lat.Lo)*rand.Float64()
 				randLng := cellRect.Lng.Lo + (cellRect.Lng.Hi-cellRect.Lng.Lo)*rand.Float64()
 				randomLatLng := s2.LatLngFromDegrees(randLat, randLng)
-				randomCell := s2.CellFromCellID(randomCellId)
 				randomCellId = s2.CellFromLatLng(randomLatLng).ID().Parent(cm.pokemonCellsLevel)
-
+				randomCell := s2.CellFromCellID(randomCellId)
 				if trainerCell.ContainsCell(randomCell) {
 					numGenerated++
 					wildPokemon := generateWildPokemon(pokemonSpecies, randomCellId)
