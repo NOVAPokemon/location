@@ -26,6 +26,9 @@ func TestCellManager_calculateLocationTileChanges(t *testing.T) {
 	for _, cellId := range newExitCellIds {
 		fmt.Println("level: ", s2.CellFromCellID(cellId).Level())
 	}
-
 	fmt.Println(len(newExitCellIds))
+}
+
+func TestCellManager_testCapAndIntersection(t *testing.T) {
+
 }

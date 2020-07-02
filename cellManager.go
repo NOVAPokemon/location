@@ -411,7 +411,6 @@ func (cm *CellManager) removeTrainerFromCell(cellID s2.CellID) {
 	if activeCellValue, ok := cm.activeCells.Load(cellID); ok {
 		activeCell := activeCellValue.(activeCellsValueType)
 		var nrTrainersInTile int64
-		activeCell = activeCellValue.(activeCellsValueType)
 		nrTrainersInTile = activeCell.RemoveTrainer()
 		if nrTrainersInTile == 0 {
 			cm.changeTrainerCellsLock.Lock() // ensures no one else is creating or deleting the tile
