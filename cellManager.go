@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -79,6 +78,9 @@ func NewCellManager(gyms []utils.GymWithServer, config *LocationServerConfig, ce
 			LevelMod: 1,
 			MaxCells: maxCells,
 		},
+		trainersCellsLevel: config.TrainersCellLevel,
+		pokemonCellsLevel: config.PokemonCellLevel,
+		gymsCellLevel: config.GymsCellLevel,
 		cellsOwned:      cellsOwned,
 		totalNrTrainers: new(int64),
 	}
@@ -153,7 +155,6 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 			pokemonGenerated := make([]utils.WildPokemonWithServer, toGenerate)
 			for numGenerated := 0; numGenerated < toGenerate; {
 				cellRect := trainerCell.RectBound()
-				log.Infof("rectangle bounds : %+v", cellRect)
 				randLat := cellRect.Lat.Lo + (cellRect.Lat.Hi-cellRect.Lat.Lo)*rand.Float64()
 				randLng := cellRect.Lng.Lo + (cellRect.Lng.Hi-cellRect.Lng.Lo)*rand.Float64()
 				randomLatLng := s2.LatLng{
@@ -162,9 +163,6 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 				}
 				randomCellId := s2.CellFromLatLng(randomLatLng).ID().Parent(cm.pokemonCellsLevel)
 				randomCell := s2.CellFromCellID(randomCellId)
-
-				fmt.Printf("level: %d\n", cm.pokemonCellsLevel)
-				fmt.Printf("checking if cell %d contains cell %d\n", trainerCell.ID(), randomCell.ID())
 
 				if trainerCell.ContainsCell(randomCell) {
 					numGenerated++
