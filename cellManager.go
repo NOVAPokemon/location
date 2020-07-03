@@ -153,14 +153,15 @@ func (cm *CellManager) getGymsInCells(cellIds s2.CellUnion) []utils.GymWithServe
 
 func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 	log.Infof("starting pokemon generation")
-
+	totalPokemonGenerated := 0
+	cellCount := 0
 	for {
 		cm.activeCells.Range(func(trainerCellIdInterface, activeCellInterface interface{}) bool {
+			cellCount++
 			trainerCellId := trainerCellIdInterface.(s2.CellID)
 			trainerCell := s2.CellFromCellID(trainerCellId)
 			activeCell := activeCellInterface.(activeCellsValueType)
 			toGenerate := int(activeCell.GetNrTrainers()) * config.PokemonsToGeneratePerTrainerCell
-			log.Infof("Generating %d pokemons for cell %d", toGenerate, activeCell.cellID)
 			pokemonGenerated := make([]utils.WildPokemonWithServer, toGenerate)
 			for numGenerated := 0; numGenerated < toGenerate; {
 				cellRect := trainerCell.RectBound()
@@ -175,12 +176,12 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 
 				if trainerCell.ContainsCell(randomCell) {
 					numGenerated++
+					totalPokemonGenerated++
 					wildPokemon := generateWildPokemon(pokemonSpecies, randomCellId)
-					log.Infof("Added wild pokemon %s to cellId: %d", wildPokemon.Pokemon.Id.Hex(), randomCellId)
+					//log.Infof("Added wild pokemon %s to cellId: %d", wildPokemon.Pokemon.Id.Hex(), randomCellId)
 					pokemonGenerated = append(pokemonGenerated, wildPokemon)
 				} else {
-					log.Infof("randomized point (%f, %f) for pokemon generation ended up outside of boundaries %v",
-						randomLatLng.Lat.Degrees(), randomLatLng.Lng.Degrees(), cellRect)
+					//log.Infof("randomized point (%f, %f) for pokemon generation ended up outside of boundaries %v", randomLatLng.Lat.Degrees(), randomLatLng.Lng.Degrees(), cellRect)
 				}
 			}
 			activeCell.AcquireReadLock()
@@ -191,6 +192,7 @@ func (cm *CellManager) generateWildPokemonsForServerPeriodically() {
 			activeCell.ReleaseReadLock()
 			return true
 		})
+		log.Infof("Finished pokemon generation, generated %d pokemons among %d cells", totalPokemonGenerated, cellCount)
 		sleepDuration := time.Duration(float64(config.IntervalBetweenGenerations)) * time.Second
 		time.Sleep(sleepDuration)
 	}

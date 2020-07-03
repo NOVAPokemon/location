@@ -554,7 +554,7 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 		return wrapHandleLocationMsgs(err)
 	}
 
-	log.Infof("User %s is on cells: %+v", user, currCells)
+	log.Infof("User %s is on %d cells: %+v", user, len(currCells))
 
 	cellsPerServer, err := getServersForCells(currCells...)
 	if err != nil {
