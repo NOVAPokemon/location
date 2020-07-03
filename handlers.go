@@ -209,7 +209,8 @@ func HandleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	toSend := make(map[s2.CellID]int64)
 	servername := mux.Vars(r)[api.ServerNamePathVar]
-	if servername == "*" {
+	if servername == "all" {
+		log.Info("Getting active cells for all servers")
 		serverConfigs, err := locationdb.GetAllServerConfigs()
 		if err != nil {
 			panic(err)
@@ -236,16 +237,19 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 					toSend[cellNr] = trainerNr
 				}
 				wg.Done()
+				log.Info("Done getting active cells from server %s", serverNameCopy)
 			}()
 		}
 		wg.Wait()
 	} else {
+		log.Info("Responding with active cells...")
 		cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
 			activeCell := activeCellValue.(activeCellsValueType)
 			toSend[cellId.(s2.CellID)] = activeCell.GetNrTrainers()
 			return true
 		})
 	}
+
 	if toWrite, err := json.Marshal(toSend); err == nil {
 		_, _ = w.Write(toWrite)
 	}
