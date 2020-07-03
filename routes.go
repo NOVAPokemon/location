@@ -67,7 +67,7 @@ var routes = utils.Routes{
 	utils.Route{
 		Name:        GetActiveCells,
 		Method:      GET,
-		Pattern:     api.GetActiveTiles,
+		Pattern:     api.GetActiveCellsRoute,
 		HandlerFunc: HandleGetActiveCells,
 	},
 }

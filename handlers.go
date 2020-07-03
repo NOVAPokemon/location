@@ -205,43 +205,47 @@ func HandleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 	cm.SetServerCells(cellIds)
 }
 
-// Debug method to check if world is well subdivided
+// HandleGetActiveCells is a debug method to check if world is well subdivided
 func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
-	queryServerName := r.FormValue(api.GetActiveTilesRoute)
-	toSend := make(map[s2.CellID]int32)
-	if queryServerName == "*" {
+	toSend := make(map[s2.CellID]int64)
+	servername := mux.Vars(r)[api.ServerNamePathVar]
+	if servername == "*" {
 		serverConfigs, err := locationdb.GetAllServerConfigs()
 		if err != nil {
 			panic(err)
 		}
-		for serverName := range serverConfigs {
-			u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless), Path: fmt.Sprintf(api.GetServerForLocationPath)}
-			q := u.Query()
-			q.Set(api.ServerNamePathVar, serverName)
-			resp, err := http.Get(u.String())
-			if err != nil {
-				panic(err)
-			}
-			respDecoded := map[s2.CellID]int32{}
-			err = json.NewDecoder(resp.Body).Decode(&respDecoded)
-			if err != nil {
-				panic(err)
-			}
-			for cellNr, trainerNr := range respDecoded {
-				toSend[cellNr] = trainerNr
-			}
+		wg := sync.WaitGroup{}
+		for currServerName := range serverConfigs {
+			serverNameCopy := currServerName
+			go func() {
+				wg.Add(1)
+				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless), Path: api.GetActiveCells}
+				q := u.Query()
+				q.Set(api.ServerNamePathVar, serverNameCopy)
+				var resp *http.Response
+				resp, err = http.Get(u.String())
+				if err != nil {
+					panic(err)
+				}
+				respDecoded := map[s2.CellID]int64{}
+				err = json.NewDecoder(resp.Body).Decode(&respDecoded)
+				if err != nil {
+					panic(err)
+				}
+				for cellNr, trainerNr := range respDecoded {
+					toSend[cellNr] = trainerNr
+				}
+				wg.Done()
+			}()
 		}
-	}
-
-	if queryServerName == serverName {
-		toSend := make(map[s2.CellID]ActiveCell)
+		wg.Wait()
+	} else {
 		cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
 			activeCell := activeCellValue.(activeCellsValueType)
-			toSend[cellId.(s2.CellID)] = activeCell
+			toSend[cellId.(s2.CellID)] = activeCell.GetNrTrainers()
 			return true
 		})
 	}
-
 	if toWrite, err := json.Marshal(toSend); err == nil {
 		_, _ = w.Write(toWrite)
 	}
