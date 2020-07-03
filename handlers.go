@@ -76,14 +76,14 @@ func init() {
 				// if configs are missing, server 0 adds them
 				err := insertDefaultBoundariesInDB()
 				if err != nil {
-					log.Error(WrapInit(err))
+					log.Warn(WrapInit(err))
 				}
 			}
-			log.Error(WrapInit(err))
+			log.Warn(WrapInit(err))
 		} else {
 			gyms, err := locationdb.GetGyms()
 			if err != nil {
-				log.Error(err)
+				log.Warn(err)
 				continue
 			}
 

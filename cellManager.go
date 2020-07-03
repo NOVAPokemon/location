@@ -401,7 +401,7 @@ func (cm *CellManager) SetServerCells(newCells s2.CellUnion) {
 func (cm *CellManager) SetGyms(gymWithSrv []utils.GymWithServer) error {
 	for _, gymWithSrv := range gymWithSrv {
 		if err := cm.AddGym(gymWithSrv); err != nil {
-			log.Error(WrapSetGymsError(err, gymWithSrv.Gym.Name))
+			log.Warn(WrapSetGymsError(err, gymWithSrv.Gym.Name))
 		}
 	}
 	return nil
