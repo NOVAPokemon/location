@@ -218,10 +218,10 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		}
 		wg := sync.WaitGroup{}
 		for currServerName := range serverConfigs {
-			serverNameCopy := currServerName
+			serverAddr := currServerName
 			wg.Add(1)
 			go func() {
-				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s", serverNameCopy, serviceNameHeadless), Path: fmt.Sprintf(api.GetActiveCells, serverNameCopy)}
+				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, serverAddr)}
 				var resp *http.Response
 				resp, err = http.Get(u.String())
 				if err != nil {
@@ -236,7 +236,7 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 					toSend[cellNr] = trainerNr
 				}
 				wg.Done()
-				log.Info("Done getting active cells from server %s", serverNameCopy)
+				log.Info("Done getting active cells from server %s", serverAddr)
 			}()
 		}
 		wg.Wait()
@@ -248,7 +248,7 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 			return true
 		})
 	} else {
-		u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s", queryServerName, serviceNameHeadless), Path: fmt.Sprintf(api.GetActiveCells, queryServerName)}
+		u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, queryServerName)}
 		var resp *http.Response
 		resp, err := http.Get(u.String())
 		if err != nil {
