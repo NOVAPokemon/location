@@ -208,8 +208,9 @@ func HandleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 // HandleGetActiveCells is a debug method to check if world is well subdivided
 func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	toSend := make(map[s2.CellID]int64)
-	servername := mux.Vars(r)[api.ServerNamePathVar]
-	if servername == "all" {
+	queryServerName := mux.Vars(r)[api.ServerNamePathVar]
+	log.Info("Request to get active cells")
+	if queryServerName == "all" {
 		log.Info("Getting active cells for all servers")
 		serverConfigs, err := locationdb.GetAllServerConfigs()
 		if err != nil {
@@ -218,11 +219,9 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		wg := sync.WaitGroup{}
 		for currServerName := range serverConfigs {
 			serverNameCopy := currServerName
+			wg.Add(1)
 			go func() {
-				wg.Add(1)
-				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s", serverName, serviceNameHeadless), Path: api.GetActiveCells}
-				q := u.Query()
-				q.Set(api.ServerNamePathVar, serverNameCopy)
+				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s", serverNameCopy, serviceNameHeadless), Path: fmt.Sprintf(api.GetActiveCells, serverNameCopy)}
 				var resp *http.Response
 				resp, err = http.Get(u.String())
 				if err != nil {
@@ -241,15 +240,29 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 			}()
 		}
 		wg.Wait()
-	} else {
+	} else if serverName == queryServerName {
 		log.Info("Responding with active cells...")
 		cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
 			activeCell := activeCellValue.(activeCellsValueType)
 			toSend[cellId.(s2.CellID)] = activeCell.GetNrTrainers()
 			return true
 		})
+	} else {
+		u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s", queryServerName, serviceNameHeadless), Path: fmt.Sprintf(api.GetActiveCells, queryServerName)}
+		var resp *http.Response
+		resp, err := http.Get(u.String())
+		if err != nil {
+			panic(err)
+		}
+		respDecoded := map[s2.CellID]int64{}
+		err = json.NewDecoder(resp.Body).Decode(&respDecoded)
+		if err != nil {
+			panic(err)
+		}
+		for cellNr, trainerNr := range respDecoded {
+			toSend[cellNr] = trainerNr
+		}
 	}
-
 	if toWrite, err := json.Marshal(toSend); err == nil {
 		_, _ = w.Write(toWrite)
 	}
