@@ -7,67 +7,71 @@ import (
 	"github.com/NOVAPokemon/utils/api"
 )
 
-const UserLocationName = "USER_LOCATION"
-const AddGymLocationName = "GYM_LOCATION"
+const (
+	userLocationName   = "USER_LOCATION"
+	addGymLocationName = "GYM_LOCATION"
 
-const GetGlobalRegionConfigName = "GET_GLOBAL_SERVER_CONFIG"
-const GetServerForLocationName = "GET_SERVER_FOR_LOCATION"
-const SetServerConfigsName = "SET_SERVER_CONFIG"
-const ForceLoadConfigName = "RELOAD_SERVER_CONFIG"
-const GetActiveCells = "GET_ACTIVE_CELLS"
+	getGlobalRegionConfigName = "GET_GLOBAL_SERVER_CONFIG"
+	getServerForLocationName  = "GET_SERVER_FOR_LOCATION"
+	setServerConfigsName      = "SET_SERVER_CONFIG"
+	forceLoadConfigName       = "RELOAD_SERVER_CONFIG"
+	getActiveCells            = "GET_ACTIVE_CELLS"
+)
 
-const GET = "GET"
-const POST = "POST"
-const PUT = "PUT"
+const (
+	get  = "GET"
+	post = "POST"
+	put  = "PUT"
+)
 
 var routes = utils.Routes{
 	api.GenStatusRoute(strings.ToLower(serviceName)),
 	utils.Route{
-		Name:        UserLocationName,
-		Method:      GET,
+		Name:        userLocationName,
+		Method:      get,
 		Pattern:     api.UserLocationRoute,
-		HandlerFunc: HandleUserLocation,
+		HandlerFunc: handleUserLocation,
 	},
 
 	utils.Route{
-		Name:        AddGymLocationName,
-		Method:      POST,
+		Name:        addGymLocationName,
+		Method:      post,
 		Pattern:     api.GymLocationRoute,
-		HandlerFunc: HandleAddGymLocation,
+		HandlerFunc: handleAddGymLocation,
 	},
 
 	utils.Route{
-		Name:        GetServerForLocationName,
-		Method:      GET,
+		Name:        getServerForLocationName,
+		Method:      get,
 		Pattern:     api.GetServerForLocationRoute,
-		HandlerFunc: HandleGetServerForLocation,
+		HandlerFunc: handleGetServerForLocation,
 	},
 
 	utils.Route{
-		Name:        SetServerConfigsName,
-		Method:      PUT,
+		Name:        setServerConfigsName,
+		Method:      put,
 		Pattern:     api.SetServerConfigRoute,
-		HandlerFunc: HandleSetServerConfigs,
+		HandlerFunc: handleSetServerConfigs,
 	},
 
 	utils.Route{
-		Name:        GetGlobalRegionConfigName,
-		Method:      GET,
+		Name:        getGlobalRegionConfigName,
+		Method:      get,
 		Pattern:     api.GetAllConfigsRoute,
-		HandlerFunc: HandleGetGlobalRegionSettings,
+		HandlerFunc: handleGetGlobalRegionSettings,
 	},
 
 	utils.Route{
-		Name:        ForceLoadConfigName,
-		Method:      GET,
+		Name:        forceLoadConfigName,
+		Method:      get,
 		Pattern:     api.ForceLoadConfigRoute,
-		HandlerFunc: HandleForceLoadConfig,
+		HandlerFunc: handleForceLoadConfig,
 	},
 
 	utils.Route{
-		Name:        GetActiveCells,
-		Method:      GET,
+		Name:        getActiveCells,
+		Method:      get,
 		Pattern:     api.GetActiveCellsRoute,
-		HandlerFunc: HandleGetActiveCells,
+		HandlerFunc: handleGetActiveCells,
 	},
 }

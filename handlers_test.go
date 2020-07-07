@@ -52,12 +52,12 @@ func Test_getServersForCells(t *testing.T) {
 	}
 
 	servers := map[string]s2.CellUnion{}
-	for serverName, config := range configs {
-		cellIds := convertStringsToCellIds(config.CellIdsStrings)
+	for serverNameAux, configAux := range configs {
+		cellIds := convertStringsToCellIds(configAux.CellIdsStrings)
 
-		for _, cell := range cells {
+		for _, cell = range cells {
 			if cellIds.ContainsCellID(cell) {
-				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+				serverAddr := fmt.Sprintf("%s.%s", serverNameAux, serviceNameHeadless)
 				servers[serverAddr] = append(servers[serverAddr], cell)
 			}
 		}

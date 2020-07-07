@@ -23,16 +23,16 @@ var (
 
 // Wrappers handlers
 
-func WrapSetGymsError(err error, gymId string) error {
+func wrapSetGymsError(err error, gymId string) error {
 	return errors.Wrap(err, fmt.Sprintf(errorAddingGym, gymId))
 }
 
 func wrapAddGymError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, AddGymLocationName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, addGymLocationName))
 }
 
 func wrapUserLocationError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, UserLocationName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, userLocationName))
 }
 
 func wrapCatchWildPokemonError(err error) error {
@@ -40,15 +40,15 @@ func wrapCatchWildPokemonError(err error) error {
 }
 
 func wrapSetServerConfigsError(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, SetServerConfigsName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, setServerConfigsName))
 }
 
 func wrapGetAllConfigs(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, GetGlobalRegionConfigName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, getGlobalRegionConfigName))
 }
 
 func wrapGetServerForLocation(err error) error {
-	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, GetServerForLocationName))
+	return errors.Wrap(err, fmt.Sprintf(utils.ErrorInHandlerFormat, getServerForLocationName))
 }
 
 // Wrappers other functions
@@ -60,11 +60,11 @@ func wrapHandleLocationWithTilesMsgs(err error) error {
 	return errors.Wrap(err, errorHandleLocationWithTilesMsg)
 }
 
-func WrapInit(err error) error {
+func wrapInit(err error) error {
 	return errors.Wrap(err, errorInit)
 }
 
-func WrapLoadServerBoundaries(err error) error {
+func wrapLoadServerBoundaries(err error) error {
 	return errors.Wrap(err, errorLoadServerBoundaries)
 }
 

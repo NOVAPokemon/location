@@ -1,6 +1,6 @@
 package main
 
-type LocationServerConfig struct {
+type locationServerConfig struct {
 	Timeout               int `json:"timeout_interval"`
 	Ping                  int `json:"ping_interval"`
 	UpdateGymsInterval    int `json:"update_gyms_interval"`

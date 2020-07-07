@@ -17,9 +17,9 @@ const (
 	host = utils.ServeHost
 	port = utils.LocationPort
 
-	PokemonsFilename            = "wildPokemons.json"
+	pokemonsFilename            = "wildPokemons.json"
 	configFilename              = "configs.json"
-	DefaultServerBoundariesFile = "default_server_locations.json"
+	defaultServerBoundariesFile = "default_server_locations.json"
 
 	serviceName = "LOCATION"
 )
@@ -42,7 +42,7 @@ func main() {
 
 // Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
 func loadPokemonSpecies() []string {
-	data, err := ioutil.ReadFile(PokemonsFilename)
+	data, err := ioutil.ReadFile(pokemonsFilename)
 	if err != nil {
 		log.Fatal("Error loading wildPokemons file")
 		return nil
@@ -61,21 +61,21 @@ func loadPokemonSpecies() []string {
 	return pokemonNames
 }
 
-func loadConfig() *LocationServerConfig {
+func loadConfig() *locationServerConfig {
 	fileData, err := ioutil.ReadFile(configFilename)
 	if err != nil {
 		log.Error(err)
 		return nil
 	}
 
-	var config LocationServerConfig
-	err = json.Unmarshal(fileData, &config)
+	var configAux locationServerConfig
+	err = json.Unmarshal(fileData, &configAux)
 	if err != nil {
 		log.Error(err)
 		return nil
 	}
 
-	return &config
+	return &configAux
 }
 
 func generateWildPokemon(pokemonSpecies []string, cellId s2.CellID) utils.WildPokemonWithServer {

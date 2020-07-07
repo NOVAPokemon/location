@@ -10,7 +10,7 @@ import (
 func TestCellManager_calculateLocationTileChanges(t *testing.T) {
 	userLoc := s2.LatLngFromDegrees(0.5, 0.5)
 
-	capLoc := CalculateCapForLocation(userLoc, float64(500))
+	capLoc := calculateCapForLocation(userLoc, float64(500))
 
 	trainersCellLevel := 18
 	trainersRegionCoverer := s2.RegionCoverer{

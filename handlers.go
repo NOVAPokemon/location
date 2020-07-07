@@ -38,7 +38,7 @@ const (
 )
 
 var (
-	cm                  *CellManager
+	cm                  *cellManager
 	serverName          string
 	serverNr            int64
 	timeoutInDuration   = time.Duration(config.Timeout) * time.Second
@@ -57,13 +57,13 @@ func init() {
 	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
 		serverName = aux
 	} else {
-		log.Fatal(WrapInit(errors.New("could not load server name")))
+		log.Fatal(wrapInit(errors.New("could not load server name")))
 	}
 	log.Info("Server name : ", serverName)
 
 	split := strings.Split(serverName, "-")
 	if serverNrTmp, err := strconv.ParseInt(split[len(split)-1], 10, 32); err != nil {
-		log.Fatal(WrapInit(err))
+		log.Fatal(wrapInit(err))
 	} else {
 		serverNr = serverNrTmp
 	}
@@ -74,14 +74,15 @@ func init() {
 		if err != nil {
 			if serverNr == 0 {
 				// if configs are missing, server 0 adds them
-				err := insertDefaultBoundariesInDB()
+				err = insertDefaultBoundariesInDB()
 				if err != nil {
-					log.Warn(WrapInit(err))
+					log.Warn(wrapInit(err))
 				}
 			}
-			log.Warn(WrapInit(err))
+			log.Warn(wrapInit(err))
 		} else {
-			gyms, err := locationdb.GetGyms()
+			var gyms []utils.GymWithServer
+			gyms, err = locationdb.GetGyms()
 			if err != nil {
 				log.Warn(err)
 				continue
@@ -90,32 +91,32 @@ func init() {
 			log.Infof("Loaded config: %+v", serverConfig)
 
 			cells := convertStringsToCellIds(serverConfig.CellIdsStrings)
-			cm = NewCellManager(gyms, config, cells)
+			cm = newCellManager(gyms, config, cells)
 
 			go cm.generateWildPokemonsForServerPeriodically()
-			go RefreshBoundariesPeriodic()
+			go refreshBoundariesPeriodic()
 			go refreshGymsPeriodic()
 			return
 		}
 	}
-	log.Panic(WrapInit(errors.New("could not load configs from DB")))
+	log.Panic(wrapInit(errors.New("could not load configs from DB")))
 }
 
 func insertDefaultBoundariesInDB() error {
-	data, err := ioutil.ReadFile(DefaultServerBoundariesFile)
+	data, err := ioutil.ReadFile(defaultServerBoundariesFile)
 	if err != nil {
-		return WrapLoadServerBoundaries(err)
+		return wrapLoadServerBoundaries(err)
 	}
 
 	var boundaryConfigs []utils.LocationServerCells
 	err = json.Unmarshal(data, &boundaryConfigs)
 	if err != nil {
-		return WrapLoadServerBoundaries(err)
+		return wrapLoadServerBoundaries(err)
 	}
 
 	for i := 0; i < len(boundaryConfigs); i++ {
-		if err := locationdb.UpdateServerConfig(boundaryConfigs[i].ServerName, boundaryConfigs[i]); err != nil {
-			log.Warn(WrapLoadServerBoundaries(err))
+		if err = locationdb.UpdateServerConfig(boundaryConfigs[i].ServerName, boundaryConfigs[i]); err != nil {
+			log.Warn(wrapLoadServerBoundaries(err))
 		}
 	}
 	return nil
@@ -129,14 +130,14 @@ func refreshGymsPeriodic() {
 			log.Error(err)
 			continue
 		}
-		if err := cm.SetGyms(gyms); err != nil {
+		if err = cm.setGyms(gyms); err != nil {
 			log.Error(err)
 			continue
 		}
 	}
 }
 
-func RefreshBoundariesPeriodic() {
+func refreshBoundariesPeriodic() {
 	for {
 		time.Sleep(time.Duration(config.UpdateConfigsInterval) * time.Second)
 		serverConfig, err := locationdb.GetServerConfig(serverName)
@@ -144,12 +145,12 @@ func RefreshBoundariesPeriodic() {
 			log.Error(err)
 		} else {
 			cells := convertStringsToCellIds(serverConfig.CellIdsStrings)
-			cm.SetServerCells(cells)
+			cm.setServerCells(cells)
 		}
 	}
 }
 
-func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
+func handleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 	var gym utils.GymWithServer
 	err := json.NewDecoder(r.Body).Decode(&gym)
 	if err != nil {
@@ -163,14 +164,14 @@ func HandleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = cm.AddGym(gym)
+	err = cm.addGym(gym)
 	if err != nil {
 		log.Warn("add gym to db out of my bounds")
 		return
 	}
 }
 
-func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
+func handleUserLocation(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		err = wrapUserLocationError(ws.WrapUpgradeConnectionError(err))
@@ -187,26 +188,26 @@ func HandleUserLocation(w http.ResponseWriter, r *http.Request) {
 	handleUserLocationUpdates(authToken.Username, conn)
 }
 
-func HandleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
-	config := &utils.LocationServerCells{}
+func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
+	configAux := &utils.LocationServerCells{}
 	servername := mux.Vars(r)[api.ServerNamePathVar]
-	err := json.NewDecoder(r.Body).Decode(config)
+	err := json.NewDecoder(r.Body).Decode(configAux)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapSetServerConfigsError(err), http.StatusBadRequest)
 		return
 	}
-	err = locationdb.UpdateServerConfig(servername, *config)
+	err = locationdb.UpdateServerConfig(servername, *configAux)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapSetServerConfigsError(err), http.StatusInternalServerError)
 		return
 	}
 
-	cellIds := convertStringsToCellIds(config.CellIdsStrings)
-	cm.SetServerCells(cellIds)
+	cellIds := convertStringsToCellIds(configAux.CellIdsStrings)
+	cm.setServerCells(cellIds)
 }
 
 // HandleGetActiveCells is a debug method to check if world is well subdivided
-func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
+func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	toSend := make(map[s2.CellID]int64)
 	queryServerName := mux.Vars(r)[api.ServerNamePathVar]
 	log.Info("Request to get active cells")
@@ -243,8 +244,8 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	} else if serverName == queryServerName {
 		log.Info("Responding with active cells...")
 		cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
-			activeCell := activeCellValue.(activeCellsValueType)
-			toSend[cellId.(s2.CellID)] = activeCell.GetNrTrainers()
+			cell := activeCellValue.(activeCellsValueType)
+			toSend[cellId.(s2.CellID)] = cell.getNrTrainers()
 			return true
 		})
 	} else {
@@ -268,7 +269,7 @@ func HandleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func HandleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
+func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 	serverConfigs, err := locationdb.GetAllServerConfigs()
 	if err != nil {
 		log.Fatal(err)
@@ -280,7 +281,7 @@ func HandleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(toSend)
 }
 
-func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
+func handleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 	latStr := r.FormValue(api.LatitudeQueryParam)
 	lonStr := r.FormValue(api.LongitudeQueryParam)
 
@@ -319,7 +320,8 @@ func HandleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for serverAddr := range servers {
-		toSend, err := json.Marshal(serverAddr)
+		var toSend []byte
+		toSend, err = json.Marshal(serverAddr)
 		if err != nil {
 			utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
 			return
@@ -345,7 +347,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	doneReceive := handleMessagesLoop(conn, inChan, finish)
 	doneSend := handleWriteLoop(conn, outChan, finish)
 	defer func() {
-		if err := cm.RemoveTrainerLocation(user); err != nil {
+		if err := cm.removeTrainerLocation(user); err != nil {
 			log.Error(err)
 		}
 		close(finish)
@@ -502,7 +504,7 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 	}
 	cm.cellsOwnedLock.RUnlock()
 
-	toCatch, err := cm.GetPokemon(pokemonCell, catchPokemonMsg.WildPokemon)
+	toCatch, err := cm.getPokemon(pokemonCell, catchPokemonMsg.WildPokemon)
 	if err != nil {
 		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
 			Error: wrapCatchWildPokemonError(err).Error(),
@@ -570,7 +572,7 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 
 	log.Infof("received location update from %s at location: %+v", user, locationMsg.Location)
 
-	currCells, changed, err := cm.UpdateTrainerTiles(user, locationMsg.Location)
+	currCells, changed, err := cm.updateTrainerTiles(user, locationMsg.Location)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
 	}
@@ -586,8 +588,8 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 		var serverNames []string
 		log.Infof("User %s got cellsPerServer: %+v", user, serverNames)
 
-		for serverName := range cellsPerServer {
-			serverNames = append(serverNames, serverName)
+		for serverNameAux := range cellsPerServer {
+			serverNames = append(serverNames, serverNameAux)
 		}
 
 		channel <- ws.GenericMsg{
@@ -663,11 +665,11 @@ func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
 	}
 
 	servers := map[string]s2.CellUnion{}
-	for serverName, config := range configs {
-		cellIds := convertStringsToCellIds(config.CellIdsStrings)
+	for serverNameAux, configAux := range configs {
+		cellIds := convertStringsToCellIds(configAux.CellIdsStrings)
 		for _, cellID := range cells {
 			if cellIds.ContainsCellID(cellID) {
-				serverAddr := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+				serverAddr := fmt.Sprintf("%s.%s", serverNameAux, serviceNameHeadless)
 				servers[serverAddr] = append(servers[serverAddr], cellID)
 			}
 		}
@@ -675,11 +677,11 @@ func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
 	return servers, nil
 }
 
-func HandleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
+func handleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
 	serverConfig, err := locationdb.GetServerConfig(serverName)
 	if err != nil {
 		log.Fatal(err)
 	}
 	cellIds := convertStringsToCellIds(serverConfig.CellIdsStrings)
-	cm.SetServerCells(cellIds)
+	cm.setServerCells(cellIds)
 }
