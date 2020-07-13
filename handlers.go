@@ -208,7 +208,7 @@ func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 
 // HandleGetActiveCells is a debug method to check if world is well subdivided
 func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
-	toSend := make(map[s2.CellID]int64)
+	tmpMap := sync.Map{}
 	queryServerName := mux.Vars(r)[api.ServerNamePathVar]
 	log.Info("Request to get active cells")
 	if queryServerName == "all" {
@@ -234,7 +234,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 					panic(err)
 				}
 				for cellNr, trainerNr := range respDecoded {
-					toSend[cellNr] = trainerNr
+					tmpMap.Store(cellNr, trainerNr)
 				}
 				wg.Done()
 				log.Info("Done getting active cells from server %s", serverAddr)
@@ -245,7 +245,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		log.Info("Responding with active cells...")
 		cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
 			cell := activeCellValue.(activeCellsValueType)
-			toSend[cellId.(s2.CellID)] = cell.getNrTrainers()
+			tmpMap.Store(cellId.(s2.CellID), cell.getNrTrainers())
 			return true
 		})
 	} else {
@@ -261,9 +261,16 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 		for cellNr, trainerNr := range respDecoded {
-			toSend[cellNr] = trainerNr
+			tmpMap.Store(cellNr, trainerNr)
 		}
 	}
+
+	toSend := map[s2.CellID]int64{}
+	tmpMap.Range(func(cellID, trainersNr interface{}) bool {
+		toSend[cellID.(s2.CellID)] = trainersNr.(int64)
+		return true
+	})
+
 	if toWrite, err := json.Marshal(toSend); err == nil {
 		_, _ = w.Write(toWrite)
 	}
