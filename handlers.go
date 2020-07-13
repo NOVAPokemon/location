@@ -223,8 +223,14 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 			wg.Add(1)
 			go func() {
 				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, serverAddr)}
+				client := &http.Client{}
+				var req *http.Request
+				req, err = http.NewRequest("GET", u.String(), nil)
+				if err != nil {
+					panic(err)
+				}
 				var resp *http.Response
-				resp, err = http.Get(u.String())
+				resp, err = client.Do(req)
 				if err != nil {
 					panic(err)
 				}
