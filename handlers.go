@@ -237,7 +237,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 					tmpMap.Store(cellNr, trainerNr)
 				}
 				wg.Done()
-				log.Info("Done getting active cells from server %s", serverAddr)
+				log.Infof("Done getting active cells from server %s", serverAddr)
 			}()
 		}
 		wg.Wait()
