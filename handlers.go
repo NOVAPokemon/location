@@ -271,9 +271,9 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	toSend := map[s2.CellID]int64{}
+	toSend := map[string]int64{}
 	tmpMap.Range(func(cellID, trainersNr interface{}) bool {
-		toSend[cellID.(s2.CellID)] = trainersNr.(int64)
+		toSend[cellID.(s2.CellID).ToToken()] = trainersNr.(int64)
 		return true
 	})
 
