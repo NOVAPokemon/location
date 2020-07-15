@@ -213,34 +213,36 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	log.Info("Request to get active cells")
 	if queryServerName == "all" {
 		log.Info("Getting active cells for all servers")
-		serverConfigs, err := locationdb.GetAllServerConfigs()
-		if err != nil {
-			panic(err)
+		serverConfigs, fetchErr := locationdb.GetAllServerConfigs()
+		if fetchErr != nil {
+			panic(fetchErr)
 		}
-		wg := sync.WaitGroup{}
+		wg := &sync.WaitGroup{}
 		for currServerName := range serverConfigs {
 			serverAddr := currServerName
+
+			if serverAddr == serverName {
+				cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
+					cell := activeCellValue.(activeCellsValueType)
+					tmpMap.Store(cellId.(s2.CellID).ToToken(), cell.getNrTrainers())
+					return true
+				})
+				continue
+			}
 			wg.Add(1)
 			go func() {
 				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, serverAddr)}
-				client := &http.Client{}
-				var req *http.Request
-				req, err = http.NewRequest("GET", u.String(), nil)
+				resp, err := http.Get(u.String())
 				if err != nil {
 					panic(err)
 				}
-				var resp *http.Response
-				resp, err = client.Do(req)
-				if err != nil {
-					panic(err)
-				}
-				respDecoded := map[s2.CellID]int64{}
+				respDecoded := map[string]int64{}
 				err = json.NewDecoder(resp.Body).Decode(&respDecoded)
 				if err != nil {
 					panic(err)
 				}
-				for cellNr, trainerNr := range respDecoded {
-					tmpMap.Store(cellNr, trainerNr)
+				for cellID, trainerNr := range respDecoded {
+					tmpMap.Store(cellID, trainerNr)
 				}
 				wg.Done()
 				log.Infof("Done getting active cells from server %s", serverAddr)
@@ -251,7 +253,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		log.Info("Responding with active cells...")
 		cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
 			cell := activeCellValue.(activeCellsValueType)
-			tmpMap.Store(cellId.(s2.CellID), cell.getNrTrainers())
+			tmpMap.Store(cellId.(s2.CellID).ToToken(), cell.getNrTrainers())
 			return true
 		})
 	} else {
@@ -273,7 +275,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 	toSend := map[string]int64{}
 	tmpMap.Range(func(cellID, trainersNr interface{}) bool {
-		toSend[cellID.(s2.CellID).ToToken()] = trainersNr.(int64)
+		toSend[cellID.(string)] = trainersNr.(int64)
 		return true
 	})
 
