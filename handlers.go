@@ -210,8 +210,8 @@ func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 	type trainersInCell struct {
-		cellID     string
-		trainersNr int64
+		CellID     string `json:"cell_id"`
+		TrainersNr int64  `json:"trainers_nr"`
 	}
 
 	tmpMap := sync.Map{}
@@ -235,6 +235,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 				})
 				continue
 			}
+
 			wg.Add(1)
 			go func() {
 				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, serverAddr)}
@@ -248,7 +249,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 					panic(err)
 				}
 				for _, curr := range respDecoded {
-					tmpMap.Store(curr.cellID, curr.trainersNr)
+					tmpMap.Store(curr.CellID, curr.TrainersNr)
 				}
 				wg.Done()
 				log.Infof("Done getting active cells from server %s", serverAddr)
@@ -275,17 +276,21 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 		for _, curr := range respDecoded {
-			tmpMap.Store(curr.cellID, curr.trainersNr)
+			tmpMap.Store(curr.CellID, curr.TrainersNr)
 		}
 	}
 
 	var toSend []trainersInCell
 	tmpMap.Range(func(cellID, trainersNr interface{}) bool {
-		toSend = append(toSend, trainersInCell{cellID: cellID.(string), trainersNr: trainersNr.(int64)})
+		toAppend := trainersInCell{CellID: cellID.(string), TrainersNr: trainersNr.(int64)}
+		toSend = append(toSend, toAppend)
 		return true
 	})
 
-	if toWrite, err := json.Marshal(toSend); err == nil {
+	toWrite, err := json.Marshal(toSend)
+	if err != nil {
+		panic(err)
+	} else {
 		_, _ = w.Write(toWrite)
 	}
 }
