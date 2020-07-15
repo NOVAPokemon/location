@@ -247,8 +247,8 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					panic(err)
 				}
-				for cellID, trainerNr := range respDecoded {
-					tmpMap.Store(cellID, trainerNr)
+				for _, curr := range respDecoded {
+					tmpMap.Store(curr.cellID, curr.trainersNr)
 				}
 				wg.Done()
 				log.Infof("Done getting active cells from server %s", serverAddr)
@@ -274,8 +274,8 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			panic(err)
 		}
-		for cellNr, trainerNr := range respDecoded {
-			tmpMap.Store(cellNr, trainerNr)
+		for _, curr := range respDecoded {
+			tmpMap.Store(curr.cellID, curr.trainersNr)
 		}
 	}
 
