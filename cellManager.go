@@ -16,7 +16,7 @@ import (
 type (
 	gymsFromTileValueType = []utils.GymWithServer
 	trainerTilesValueType = s2.CellUnion
-	activeCellsValueType  = activeCell
+	activeCellsValueType  = *activeCell
 )
 
 const (
