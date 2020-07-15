@@ -208,6 +208,12 @@ func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 
 // HandleGetActiveCells is a debug method to check if world is well subdivided
 func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
+
+	type trainersInCell struct {
+		cellID     string
+		trainersNr int64
+	}
+
 	tmpMap := sync.Map{}
 	queryServerName := mux.Vars(r)[api.ServerNamePathVar]
 	log.Info("Request to get active cells")
@@ -236,7 +242,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					panic(err)
 				}
-				respDecoded := map[string]int64{}
+				var respDecoded []trainersInCell
 				err = json.NewDecoder(resp.Body).Decode(&respDecoded)
 				if err != nil {
 					panic(err)
@@ -263,7 +269,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			panic(err)
 		}
-		respDecoded := map[s2.CellID]int64{}
+		var respDecoded []trainersInCell
 		err = json.NewDecoder(resp.Body).Decode(&respDecoded)
 		if err != nil {
 			panic(err)
@@ -273,9 +279,9 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	toSend := map[string]int64{}
+	var toSend []trainersInCell
 	tmpMap.Range(func(cellID, trainersNr interface{}) bool {
-		toSend[cellID.(string)] = trainersNr.(int64)
+		toSend = append(toSend, trainersInCell{cellID: cellID.(string), trainersNr: trainersNr.(int64)})
 		return true
 	})
 
