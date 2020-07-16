@@ -34,10 +34,22 @@ var (
 )
 
 func main() {
-	utils.CheckLogFlag(serviceName)
+	flags := utils.ParseFlags(serverName)
+
+	if !*flags.LogToStdout {
+		utils.SetLogFile(serverName)
+	}
+
+	if utils.CheckDelayedFlag(*flags.DelayedComms) {
+		commsManager = utils.CreateDefaultCommunicationManager()
+	} else {
+		locationTag := utils.GetLocationTag(utils.DefaultLocationTagsFilename, serverName)
+		commsManager = utils.CreateDelayedCommunicationManager(utils.DefaultDelayConfigFilename, locationTag)
+	}
+
 	pokemonSpecies = loadPokemonSpecies()
 	recordMetrics()
-	utils.StartServer(serviceName, host, port, routes)
+	utils.StartServer(serviceName, host, port, routes, commsManager)
 }
 
 // Pokemons taken from https://raw.githubusercontent.com/sindresorhus/pokemon/master/data/en.json
