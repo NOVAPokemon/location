@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/NOVAPokemon/utils/comms_manager"
 	"github.com/golang/geo/s2"
 
 	"github.com/NOVAPokemon/utils"
@@ -45,6 +46,7 @@ var (
 	httpClient          = &http.Client{}
 	clientChannels      = sync.Map{}
 	serviceNameHeadless string
+	commsManager        comms_manager.CommunicationManager
 )
 
 func init() {
@@ -333,7 +335,8 @@ func handleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	inChan := make(chan *ws.Message)
-	outChan := make(chan ws.GenericMsg)
+	outChan := make(chan *ws.Serializable)
+	pingChan := make(chan ws.GenericMsg)
 	finish := make(chan struct{})
 
 	clientChannels.Store(user, outChan)
@@ -345,7 +348,8 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 		return nil
 	})
 	doneReceive := handleMessagesLoop(conn, inChan, finish)
-	doneSend := handleWriteLoop(conn, outChan, finish)
+	doneSend := handleWriteLoop(conn, outChan, pingChan, finish, commsManager)
+
 	defer func() {
 		if err := cm.removeTrainerLocation(user); err != nil {
 			log.Error(err)
@@ -365,6 +369,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 		clientChannels.Delete(user)
 		atomic.AddInt64(cm.totalNrTrainers, -1)
 	}()
+
 	atomic.AddInt64(cm.totalNrTrainers, 1)
 	var pingTicker = time.NewTicker(time.Duration(config.Ping) * time.Second)
 	for {
@@ -383,7 +388,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			// log.Warn("Pinging")
 			select {
 			case <-finish:
-			case outChan <- ws.GenericMsg{MsgType: websocket.PingMessage, Data: []byte{}}:
+			case pingChan <- ws.GenericMsg{MsgType: websocket.PingMessage, Data: []byte{}}:
 			}
 		case <-finish:
 			log.Infof("Stopped tracking user %s location", user)
@@ -392,7 +397,9 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	}
 }
 
-func handleWriteLoop(conn *websocket.Conn, channel chan ws.GenericMsg, finished chan struct{}) (done chan struct{}) {
+func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.Serializable, pingChannel <-chan ws.GenericMsg,
+	finished chan struct{},
+	writer comms_manager.CommunicationManager) (done chan struct{}) {
 	done = make(chan struct{})
 
 	go func() {
@@ -402,8 +409,18 @@ func handleWriteLoop(conn *websocket.Conn, channel chan ws.GenericMsg, finished 
 				if !ok {
 					return
 				}
-				// log.Info("Sending ", msg.MsgType, string(msg.Data))
-				if err := conn.WriteMessage(msg.MsgType, msg.Data); err != nil {
+
+				err := writer.WriteTextMessageToConn(conn, *msg)
+				if err != nil {
+					log.Error(ws.WrapWritingMessageError(err))
+				}
+			case msg, ok := <-pingChannel:
+				if !ok {
+					return
+				}
+
+				err := writer.WriteNonTextMessageToConn(conn, msg.MsgType, msg.Data)
+				if err != nil {
 					log.Error(ws.WrapWritingMessageError(err))
 				}
 			case <-finished:
@@ -421,7 +438,7 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 	go func() {
 		defer close(done)
 		for {
-			msg, err := clients.Read(conn)
+			msg, err := clients.Read(conn, commsManager)
 			if err != nil {
 				log.Error(err)
 				return
@@ -528,7 +545,7 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 	caught := rand.Float64() <= catchingProbability
 	var pokemonTokens []string
 	if caught {
-		var trainersClient = clients.NewTrainersClient(httpClient)
+		var trainersClient = clients.NewTrainersClient(httpClient, commsManager)
 		_, err = trainersClient.AddPokemonToTrainer(user, pokemon)
 		if err != nil {
 
