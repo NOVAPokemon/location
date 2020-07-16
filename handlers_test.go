@@ -53,7 +53,7 @@ func Test_getServersForCells(t *testing.T) {
 
 	servers := map[string]s2.CellUnion{}
 	for serverNameAux, configAux := range configs {
-		cellIds := convertStringsToCellIds(configAux.CellIdsStrings)
+		cellIds := convertCellTokensToIds(configAux.CellIdsStrings)
 
 		for _, cell = range cells {
 			if cellIds.ContainsCellID(cell) {
