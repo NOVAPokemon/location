@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"math/rand"
-	"strconv"
 	"sync"
 	"time"
 
@@ -478,14 +477,10 @@ func (cm *cellManager) addTrainerToCell(cellID s2.CellID) {
 	}
 }
 
-func convertStringsToCellIds(cellIdsStrings []string) s2.CellUnion {
+func convertCellTokensToIds(cellIdsStrings []string) s2.CellUnion {
 	cells := make(s2.CellUnion, len(cellIdsStrings))
-	for i, cellId := range cellIdsStrings {
-		if id, err := strconv.ParseUint(cellId, 10, 64); err == nil {
-			cells[i] = s2.CellID(id)
-		} else {
-			panic("error loading config")
-		}
+	for i, cellToken := range cellIdsStrings {
+		cells[i] = s2.CellIDFromToken(cellToken)
 	}
 	return cells
 }

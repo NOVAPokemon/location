@@ -90,7 +90,7 @@ func init() {
 
 			log.Infof("Loaded config: %+v", serverConfig)
 
-			cells := convertStringsToCellIds(serverConfig.CellIdsStrings)
+			cells := convertCellTokensToIds(serverConfig.CellIdsStrings)
 			cm = newCellManager(gyms, config, cells)
 
 			go cm.generateWildPokemonsForServerPeriodically()
@@ -144,7 +144,7 @@ func refreshBoundariesPeriodic() {
 		if err != nil {
 			log.Error(err)
 		} else {
-			cells := convertStringsToCellIds(serverConfig.CellIdsStrings)
+			cells := convertCellTokensToIds(serverConfig.CellIdsStrings)
 			cm.setServerCells(cells)
 		}
 	}
@@ -202,7 +202,7 @@ func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cellIds := convertStringsToCellIds(configAux.CellIdsStrings)
+	cellIds := convertCellTokensToIds(configAux.CellIdsStrings)
 	cm.setServerCells(cellIds)
 }
 
@@ -666,7 +666,7 @@ func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
 
 	servers := map[string]s2.CellUnion{}
 	for serverNameAux, configAux := range configs {
-		cellIds := convertStringsToCellIds(configAux.CellIdsStrings)
+		cellIds := convertCellTokensToIds(configAux.CellIdsStrings)
 		for _, cellID := range cells {
 			if cellIds.ContainsCellID(cellID) {
 				serverAddr := fmt.Sprintf("%s.%s", serverNameAux, serviceNameHeadless)
@@ -682,6 +682,6 @@ func handleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cellIds := convertStringsToCellIds(serverConfig.CellIdsStrings)
+	cellIds := convertCellTokensToIds(serverConfig.CellIdsStrings)
 	cm.setServerCells(cellIds)
 }
