@@ -210,36 +210,51 @@ func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 
 // HandleGetActiveCells is a debug method to check if world is well subdivided
 func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
-	toSend := make(map[s2.CellID]int64)
+
+	type trainersInCell struct {
+		CellID     string `json:"cell_id"`
+		TrainersNr int64  `json:"trainers_nr"`
+	}
+
+	tmpMap := sync.Map{}
 	queryServerName := mux.Vars(r)[api.ServerNamePathVar]
 	log.Info("Request to get active cells")
 	if queryServerName == "all" {
 		log.Info("Getting active cells for all servers")
-		serverConfigs, err := locationdb.GetAllServerConfigs()
-		if err != nil {
-			panic(err)
+		serverConfigs, fetchErr := locationdb.GetAllServerConfigs()
+		if fetchErr != nil {
+			panic(fetchErr)
 		}
-		wg := sync.WaitGroup{}
+		wg := &sync.WaitGroup{}
 		for currServerName := range serverConfigs {
 			serverAddr := currServerName
+
+			if serverAddr == serverName {
+				cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
+					cell := activeCellValue.(activeCellsValueType)
+					tmpMap.Store(cellId.(s2.CellID).ToToken(), cell.getNrTrainers())
+					return true
+				})
+				continue
+			}
+
 			wg.Add(1)
 			go func() {
 				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, serverAddr)}
-				var resp *http.Response
-				resp, err = http.Get(u.String())
+				resp, err := http.Get(u.String())
 				if err != nil {
 					panic(err)
 				}
-				respDecoded := map[s2.CellID]int64{}
+				var respDecoded []trainersInCell
 				err = json.NewDecoder(resp.Body).Decode(&respDecoded)
 				if err != nil {
 					panic(err)
 				}
-				for cellNr, trainerNr := range respDecoded {
-					toSend[cellNr] = trainerNr
+				for _, curr := range respDecoded {
+					tmpMap.Store(curr.CellID, curr.TrainersNr)
 				}
 				wg.Done()
-				log.Info("Done getting active cells from server %s", serverAddr)
+				log.Infof("Done getting active cells from server %s", serverAddr)
 			}()
 		}
 		wg.Wait()
@@ -247,7 +262,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		log.Info("Responding with active cells...")
 		cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
 			cell := activeCellValue.(activeCellsValueType)
-			toSend[cellId.(s2.CellID)] = cell.getNrTrainers()
+			tmpMap.Store(cellId.(s2.CellID).ToToken(), cell.getNrTrainers())
 			return true
 		})
 	} else {
@@ -257,16 +272,27 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			panic(err)
 		}
-		respDecoded := map[s2.CellID]int64{}
+		var respDecoded []trainersInCell
 		err = json.NewDecoder(resp.Body).Decode(&respDecoded)
 		if err != nil {
 			panic(err)
 		}
-		for cellNr, trainerNr := range respDecoded {
-			toSend[cellNr] = trainerNr
+		for _, curr := range respDecoded {
+			tmpMap.Store(curr.CellID, curr.TrainersNr)
 		}
 	}
-	if toWrite, err := json.Marshal(toSend); err == nil {
+
+	var toSend []trainersInCell
+	tmpMap.Range(func(cellID, trainersNr interface{}) bool {
+		toAppend := trainersInCell{CellID: cellID.(string), TrainersNr: trainersNr.(int64)}
+		toSend = append(toSend, toAppend)
+		return true
+	})
+
+	toWrite, err := json.Marshal(toSend)
+	if err != nil {
+		panic(err)
+	} else {
 		_, _ = w.Write(toWrite)
 	}
 }
