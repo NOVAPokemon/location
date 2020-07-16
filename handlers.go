@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/NOVAPokemon/utils/comms_manager"
 	"github.com/golang/geo/s2"
 
 	"github.com/NOVAPokemon/utils"
@@ -46,7 +45,7 @@ var (
 	httpClient          = &http.Client{}
 	clientChannels      = sync.Map{}
 	serviceNameHeadless string
-	commsManager        comms_manager.CommunicationManager
+	commsManager        utils.CommunicationManager
 )
 
 func init() {
@@ -425,7 +424,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.Serializable, pingChannel <-chan ws.GenericMsg,
 	finished chan struct{},
-	writer comms_manager.CommunicationManager) (done chan struct{}) {
+	writer utils.CommunicationManager) (done chan struct{}) {
 	done = make(chan struct{})
 
 	go func() {
