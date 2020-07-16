@@ -360,8 +360,7 @@ func handleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	inChan := make(chan *ws.Message)
-	outChan := make(chan *ws.Serializable)
-	pingChan := make(chan ws.GenericMsg)
+	outChan := make(chan *ws.GenericMsg)
 	finish := make(chan struct{})
 
 	clientChannels.Store(user, outChan)
@@ -373,7 +372,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 		return nil
 	})
 	doneReceive := handleMessagesLoop(conn, inChan, finish)
-	doneSend := handleWriteLoop(conn, outChan, pingChan, finish, commsManager)
+	doneSend := handleWriteLoop(conn, outChan, finish, commsManager)
 
 	defer func() {
 		if err := cm.removeTrainerLocation(user); err != nil {
@@ -413,7 +412,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			// log.Warn("Pinging")
 			select {
 			case <-finish:
-			case pingChan <- ws.GenericMsg{MsgType: websocket.PingMessage, Data: []byte{}}:
+			case outChan <- &ws.GenericMsg{MsgType: websocket.PingMessage, Data: nil}:
 			}
 		case <-finish:
 			log.Infof("Stopped tracking user %s location", user)
@@ -422,8 +421,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	}
 }
 
-func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.Serializable, pingChannel <-chan ws.GenericMsg,
-	finished chan struct{},
+func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.GenericMsg, finished chan struct{},
 	writer ws.CommunicationManager) (done chan struct{}) {
 	done = make(chan struct{})
 
@@ -435,16 +433,7 @@ func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.Serializable, ping
 					return
 				}
 
-				err := writer.WriteTextMessageToConn(conn, *msg)
-				if err != nil {
-					log.Error(ws.WrapWritingMessageError(err))
-				}
-			case msg, ok := <-pingChannel:
-				if !ok {
-					return
-				}
-
-				err := writer.WriteNonTextMessageToConn(conn, msg.MsgType, msg.Data)
+				err := writer.WriteGenericMessageToConn(conn, *msg)
 				if err != nil {
 					log.Error(ws.WrapWritingMessageError(err))
 				}
