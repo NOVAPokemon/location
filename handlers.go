@@ -45,7 +45,7 @@ var (
 	httpClient          = &http.Client{}
 	clientChannels      = sync.Map{}
 	serviceNameHeadless string
-	commsManager        utils.CommunicationManager
+	commsManager        ws.CommunicationManager
 )
 
 func init() {
@@ -424,7 +424,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.Serializable, pingChannel <-chan ws.GenericMsg,
 	finished chan struct{},
-	writer utils.CommunicationManager) (done chan struct{}) {
+	writer ws.CommunicationManager) (done chan struct{}) {
 	done = make(chan struct{})
 
 	go func() {
