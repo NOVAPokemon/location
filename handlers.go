@@ -211,7 +211,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 	type trainersInCell struct {
 		CellID     string      `json:"cell_id"`
-		CellBounds []s2.LatLng `json:"cell_bounds"`
+		CellBounds [][]float64 `json:"cell_bounds"`
 		TrainersNr int64       `json:"trainers_nr"`
 	}
 
@@ -273,8 +273,13 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 	var toSend []trainersInCell
 	tmpMap.Range(func(cellID, trainersNr interface{}) bool {
-		cellBounds := s2.CellFromCellID(s2.CellIDFromToken(cellID.(string))).RectBound()
-		points := []s2.LatLng{cellBounds.Vertex(0), cellBounds.Vertex(1), cellBounds.Vertex(2), cellBounds.Vertex(3)}
+		cellRect := s2.CellFromCellID(s2.CellIDFromToken(cellID.(string))).RectBound()
+		points := [][]float64{
+			{cellRect.Vertex(0).Lat.Degrees(), cellRect.Vertex(0).Lat.Degrees()},
+			{cellRect.Vertex(1).Lat.Degrees(), cellRect.Vertex(1).Lat.Degrees()},
+			{cellRect.Vertex(2).Lat.Degrees(), cellRect.Vertex(2).Lat.Degrees()},
+			{cellRect.Vertex(3).Lat.Degrees(), cellRect.Vertex(3).Lat.Degrees()},
+		}
 		toAppend := trainersInCell{
 			CellID:     cellID.(string),
 			TrainersNr: trainersNr.(int64),
@@ -297,7 +302,7 @@ func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 	type regionConfig struct {
 		ServerName string
 		CellIDs    []string      `json:"cell_id"`
-		CellBounds [][]s2.LatLng `json:"cell_bounds"`
+		CellBounds [][][]float64 `json:"cell_bounds"`
 	}
 
 	serverConfigs, err := locationdb.GetAllServerConfigs()
@@ -306,14 +311,19 @@ func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 	}
 	serverConfigsWithBounds := make([]regionConfig, len(serverConfigs))
 	for _, serverCfg := range serverConfigs {
-		cellBounds := make([][]s2.LatLng, len(serverCfg.CellIdsStrings))
+		cellBounds := make([][][]float64, len(serverCfg.CellIdsStrings))
 		for idx, cellToken := range serverCfg.CellIdsStrings {
 			cellRect := s2.CellFromCellID(s2.CellIDFromToken(cellToken)).RectBound()
-			points := []s2.LatLng{cellRect.Vertex(0), cellRect.Vertex(1), cellRect.Vertex(2), cellRect.Vertex(3)}
+			points := [][]float64{
+				{cellRect.Vertex(0).Lat.Degrees(), cellRect.Vertex(0).Lat.Degrees()},
+				{cellRect.Vertex(1).Lat.Degrees(), cellRect.Vertex(1).Lat.Degrees()},
+				{cellRect.Vertex(2).Lat.Degrees(), cellRect.Vertex(2).Lat.Degrees()},
+				{cellRect.Vertex(3).Lat.Degrees(), cellRect.Vertex(3).Lat.Degrees()},
+			}
 			cellBounds[idx] = points
 		}
 		serverConfigsWithBounds = append(serverConfigsWithBounds, regionConfig{
-			ServerName: serverName,
+			ServerName: serverCfg.ServerName,
 			CellIDs:    serverCfg.CellIdsStrings,
 			CellBounds: cellBounds,
 		})
