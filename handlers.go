@@ -210,8 +210,9 @@ func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 	type trainersInCell struct {
-		CellID     string `json:"cell_id"`
-		TrainersNr int64  `json:"trainers_nr"`
+		CellID     string      `json:"cell_id"`
+		CellBounds []s2.LatLng `json:"cell_bounds"`
+		TrainersNr int64       `json:"trainers_nr"`
 	}
 
 	tmpMap := sync.Map{}
@@ -258,12 +259,12 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		var resp *http.Response
 		resp, err := http.Get(u.String())
 		if err != nil {
-			panic(err)
+			log.Error(err)
 		}
 		var respDecoded []trainersInCell
 		err = json.NewDecoder(resp.Body).Decode(&respDecoded)
 		if err != nil {
-			panic(err)
+			log.Error(err)
 		}
 		for _, curr := range respDecoded {
 			tmpMap.Store(curr.CellID, curr.TrainersNr)
@@ -272,7 +273,13 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 	var toSend []trainersInCell
 	tmpMap.Range(func(cellID, trainersNr interface{}) bool {
-		toAppend := trainersInCell{CellID: cellID.(string), TrainersNr: trainersNr.(int64)}
+		cellBounds := s2.CellFromCellID(s2.CellIDFromToken(cellID.(string))).RectBound()
+		points := []s2.LatLng{cellBounds.Vertex(0), cellBounds.Vertex(1), cellBounds.Vertex(2), cellBounds.Vertex(3)}
+		toAppend := trainersInCell{
+			CellID:     cellID.(string),
+			TrainersNr: trainersNr.(int64),
+			CellBounds: points,
+		}
 		toSend = append(toSend, toAppend)
 		return true
 	})
@@ -286,11 +293,32 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
+
+	type regionConfig struct {
+		ServerName string
+		CellIDs    []string      `json:"cell_id"`
+		CellBounds [][]s2.LatLng `json:"cell_bounds"`
+	}
+
 	serverConfigs, err := locationdb.GetAllServerConfigs()
 	if err != nil {
 		log.Fatal(err)
 	}
-	toSend, err := json.Marshal(serverConfigs)
+	serverConfigsWithBounds := make([]regionConfig, len(serverConfigs))
+	for _, serverCfg := range serverConfigs {
+		cellBounds := make([][]s2.LatLng, len(serverCfg.CellIdsStrings))
+		for idx, cellToken := range serverCfg.CellIdsStrings {
+			cellRect := s2.CellFromCellID(s2.CellIDFromToken(cellToken)).RectBound()
+			points := []s2.LatLng{cellRect.Vertex(0), cellRect.Vertex(1), cellRect.Vertex(2), cellRect.Vertex(3)}
+			cellBounds[idx] = points
+		}
+		serverConfigsWithBounds = append(serverConfigsWithBounds, regionConfig{
+			ServerName: serverName,
+			CellIDs:    serverCfg.CellIdsStrings,
+			CellBounds: cellBounds,
+		})
+	}
+	toSend, err := json.Marshal(serverConfigsWithBounds)
 	if err != nil {
 		utils.LogAndSendHTTPError(&w, wrapGetAllConfigs(err), http.StatusInternalServerError)
 	}
