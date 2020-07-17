@@ -275,10 +275,10 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	tmpMap.Range(func(cellID, trainersNr interface{}) bool {
 		cellRect := s2.CellFromCellID(s2.CellIDFromToken(cellID.(string))).RectBound()
 		points := [][]float64{
-			{cellRect.Vertex(0).Lat.Degrees(), cellRect.Vertex(0).Lat.Degrees()},
-			{cellRect.Vertex(1).Lat.Degrees(), cellRect.Vertex(1).Lat.Degrees()},
-			{cellRect.Vertex(2).Lat.Degrees(), cellRect.Vertex(2).Lat.Degrees()},
-			{cellRect.Vertex(3).Lat.Degrees(), cellRect.Vertex(3).Lat.Degrees()},
+			{cellRect.Vertex(0).Lat.Degrees(), cellRect.Vertex(0).Lng.Degrees()},
+			{cellRect.Vertex(1).Lat.Degrees(), cellRect.Vertex(1).Lng.Degrees()},
+			{cellRect.Vertex(2).Lat.Degrees(), cellRect.Vertex(2).Lng.Degrees()},
+			{cellRect.Vertex(3).Lat.Degrees(), cellRect.Vertex(3).Lng.Degrees()},
 		}
 		toAppend := trainersInCell{
 			CellID:     cellID.(string),
@@ -315,10 +315,10 @@ func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 		for idx, cellToken := range serverCfg.CellIdsStrings {
 			cellRect := s2.CellFromCellID(s2.CellIDFromToken(cellToken)).RectBound()
 			points := [][]float64{
-				{cellRect.Vertex(0).Lat.Degrees(), cellRect.Vertex(0).Lat.Degrees()},
-				{cellRect.Vertex(1).Lat.Degrees(), cellRect.Vertex(1).Lat.Degrees()},
-				{cellRect.Vertex(2).Lat.Degrees(), cellRect.Vertex(2).Lat.Degrees()},
-				{cellRect.Vertex(3).Lat.Degrees(), cellRect.Vertex(3).Lat.Degrees()},
+				{cellRect.Vertex(0).Lat.Degrees(), cellRect.Vertex(0).Lng.Degrees()},
+				{cellRect.Vertex(1).Lat.Degrees(), cellRect.Vertex(1).Lng.Degrees()},
+				{cellRect.Vertex(2).Lat.Degrees(), cellRect.Vertex(2).Lng.Degrees()},
+				{cellRect.Vertex(3).Lat.Degrees(), cellRect.Vertex(3).Lng.Degrees()},
 			}
 			cellBounds[idx] = points
 		}
