@@ -79,8 +79,9 @@ func init() {
 				if err != nil {
 					log.Warn(wrapInit(err))
 				}
+			} else {
+				log.Warn(wrapInit(err))
 			}
-			log.Warn(wrapInit(err))
 		} else {
 			var gyms []utils.GymWithServer
 			gyms, err = locationdb.GetGyms()
