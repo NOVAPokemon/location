@@ -451,9 +451,15 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 	go func() {
 		defer close(done)
 		for {
-			msg, err := clients.Read(conn, commsManager)
+			msgBytes, err := clients.Read(conn, commsManager)
 			if err != nil {
 				log.Warn(err)
+				return
+			}
+
+			msg, err := ws.ParseMessage(string(msgBytes))
+			if err != nil {
+				panic(err)
 				return
 			} else {
 				select {
