@@ -398,6 +398,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	for {
 		select {
 		case msg, ok := <-inChan:
+			log.Info("will read from inChan")
 			if !ok {
 				log.Warn("read channel has closed, update location msg")
 				continue
@@ -410,6 +411,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		case <-pingTicker.C:
+			log.Info("ticker triggered")
 			select {
 			case <-finish:
 			case outChan <- &ws.GenericMsg{MsgType: websocket.PingMessage, Data: nil}:
