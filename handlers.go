@@ -398,20 +398,16 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	for {
 		select {
 		case msg, ok := <-inChan:
-			log.Info("will read from inChan")
 			if !ok {
-				log.Warn("read channel has closed, update location msg")
 				continue
 			}
 			err := handleLocationMsg(user, msg)
 			if err != nil {
 				log.Error(ws.WrapWritingMessageError(err))
-				log.Info("will exit due to write error")
 				return
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		case <-pingTicker.C:
-			log.Info("ticker triggered")
 			select {
 			case <-finish:
 			case outChan <- ws.GenericMsg{MsgType: websocket.PingMessage, Data: nil}:
@@ -472,35 +468,26 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 }
 
 func handleLocationMsg(user string, msg *ws.Message) error {
-	log.Info("handling location msg")
 	channelGeneric, ok := clientChannels.Load(user)
 	if !ok {
-		log.Error("user was not registered")
 		return wrapHandleLocationMsgs(errors.New("user not registered in this server"))
 	}
 
-	log.Info("before cast to value")
 	channel := channelGeneric.(valueType)
-	log.Info("after cast to value")
 
 	switch msg.MsgType {
 	case location.CatchPokemon:
-		log.Info("will handle catch")
 		return handleCatchPokemonMsg(user, msg, channel)
 	case location.UpdateLocation:
-		log.Info("will handle update location")
 		return handleUpdateLocationMsg(user, msg, channel)
 	case location.UpdateLocationWithTiles:
-		log.Info("will handle update location with tiles")
 		return handleUpdateLocationWithTilesMsg(user, msg, channel)
 	default:
-		log.Info("went to default")
 		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
 	}
 }
 
 func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.GenericMsg) error {
-	log.Info("will handle catch pokemon message")
 	desMsg, err := location.DeserializeLocationMsg(msg)
 	if err != nil {
 		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
@@ -605,14 +592,11 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 }
 
 func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.GenericMsg) error {
-	log.Info("handling update location msg")
 	desMsg, err := location.DeserializeLocationMsg(msg)
 	if err != nil {
 		log.Info("returning update location error")
 		return wrapHandleLocationMsgs(err)
 	}
-
-	log.Info("deserialized update location successfuly")
 
 	locationMsg := desMsg.(*location.UpdateLocationMessage)
 
@@ -664,13 +648,10 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 }
 
 func handleUpdateLocationWithTilesMsg(user string, msg *ws.Message, channel chan<- ws.GenericMsg) error {
-	log.Info("handling update location with tiles msg")
 	desMsg, err := location.DeserializeLocationMsg(msg)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
 	}
-
-	log.Info("deserialized update location with tiles successfuly")
 
 	locationMsg := desMsg.(*location.UpdateLocationWithTilesMessage)
 	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
