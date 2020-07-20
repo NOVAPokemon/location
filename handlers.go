@@ -399,6 +399,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 		select {
 		case msg, ok := <-inChan:
 			if !ok {
+				log.Warn("read channel has closed, update location msg")
 				continue
 			}
 			err := handleLocationMsg(user, msg)
@@ -479,7 +480,6 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 	case location.CatchPokemon:
 		return handleCatchPokemonMsg(user, msg, channel)
 	case location.UpdateLocation:
-		// TODO remove logs
 		return handleUpdateLocationMsg(user, msg, channel)
 	case location.UpdateLocationWithTiles:
 		return handleUpdateLocationWithTilesMsg(user, msg, channel)
