@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"math/rand"
 	"sync"
 	"time"
@@ -97,7 +98,7 @@ func newCellManager(gyms []utils.GymWithServer, config *locationServerConfig, ce
 func (cm *cellManager) removeTrainerLocation(trainerId string) error {
 	tileNrsInterface, ok := cm.lastTrainerCells.Load(trainerId)
 	if !ok {
-		return errors.New("user was not being tracked")
+		return errors.New(fmt.Sprintf("user %s was not being tracked", trainerId))
 	}
 
 	tileNrs := tileNrsInterface.(trainerTilesValueType)
