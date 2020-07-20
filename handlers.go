@@ -359,7 +359,7 @@ func handleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	inChan := make(chan *ws.Message)
-	outChan := make(chan *ws.GenericMsg)
+	outChan := make(valueType)
 	finish := make(chan struct{})
 
 	clientChannels.Store(user, outChan)
@@ -414,7 +414,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			log.Info("ticker triggered")
 			select {
 			case <-finish:
-			case outChan <- &ws.GenericMsg{MsgType: websocket.PingMessage, Data: nil}:
+			case outChan <- ws.GenericMsg{MsgType: websocket.PingMessage, Data: nil}:
 			}
 		case <-finish:
 			log.Infof("Stopped tracking user %s location", user)
@@ -423,7 +423,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	}
 }
 
-func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.GenericMsg, finished chan struct{},
+func handleWriteLoop(conn *websocket.Conn, channel <-chan ws.GenericMsg, finished chan struct{},
 	writer ws.CommunicationManager) (done chan struct{}) {
 	done = make(chan struct{})
 
@@ -435,7 +435,7 @@ func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.GenericMsg, finish
 					return
 				}
 
-				err := writer.WriteGenericMessageToConn(conn, *msg)
+				err := writer.WriteGenericMessageToConn(conn, msg)
 				if err != nil {
 					log.Error(ws.WrapWritingMessageError(err))
 				}
