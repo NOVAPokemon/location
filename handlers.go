@@ -404,11 +404,11 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			err := handleLocationMsg(user, msg)
 			if err != nil {
 				log.Error(ws.WrapWritingMessageError(err))
+				log.Info("will exit due to write error")
 				return
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
 		case <-pingTicker.C:
-			// log.Warn("Pinging")
 			select {
 			case <-finish:
 			case outChan <- &ws.GenericMsg{MsgType: websocket.PingMessage, Data: nil}:
@@ -453,7 +453,7 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 		for {
 			msg, err := clients.Read(conn, commsManager)
 			if err != nil {
-				log.Error(err)
+				log.Warn(err)
 				return
 			} else {
 				select {
