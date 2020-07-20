@@ -472,6 +472,7 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 func handleLocationMsg(user string, msg *ws.Message) error {
 	channelGeneric, ok := clientChannels.Load(user)
 	if !ok {
+		log.Error("user was not registered")
 		return wrapHandleLocationMsgs(errors.New("user not registered in this server"))
 	}
 	channel := channelGeneric.(valueType)
@@ -484,6 +485,7 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 	case location.UpdateLocationWithTiles:
 		return handleUpdateLocationWithTilesMsg(user, msg, channel)
 	default:
+		log.Error("invalid msg type")
 		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
 	}
 }
