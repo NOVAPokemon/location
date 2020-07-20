@@ -494,6 +494,7 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 }
 
 func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.GenericMsg) error {
+	log.Info("will handle catch pokemon message")
 	desMsg, err := location.DeserializeLocationMsg(msg)
 	if err != nil {
 		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
