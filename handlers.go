@@ -478,7 +478,10 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 		log.Error("user was not registered")
 		return wrapHandleLocationMsgs(errors.New("user not registered in this server"))
 	}
+
+	log.Info("before cast to value")
 	channel := channelGeneric.(valueType)
+	log.Info("after cast to value")
 
 	switch msg.MsgType {
 	case location.CatchPokemon:
