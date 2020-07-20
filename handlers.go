@@ -485,13 +485,16 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 
 	switch msg.MsgType {
 	case location.CatchPokemon:
+		log.Info("will handle catch")
 		return handleCatchPokemonMsg(user, msg, channel)
 	case location.UpdateLocation:
+		log.Info("will handle update location")
 		return handleUpdateLocationMsg(user, msg, channel)
 	case location.UpdateLocationWithTiles:
+		log.Info("will handle update location with tiles")
 		return handleUpdateLocationWithTilesMsg(user, msg, channel)
 	default:
-		log.Error("invalid msg type")
+		log.Info("went to default")
 		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
 	}
 }
