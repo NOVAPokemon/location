@@ -472,6 +472,7 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 }
 
 func handleLocationMsg(user string, msg *ws.Message) error {
+	log.Info("handling location msg")
 	channelGeneric, ok := clientChannels.Load(user)
 	if !ok {
 		log.Error("user was not registered")
@@ -597,10 +598,14 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 }
 
 func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.GenericMsg) error {
+	log.Info("handling update location msg")
 	desMsg, err := location.DeserializeLocationMsg(msg)
 	if err != nil {
+		log.Info("returning update location error")
 		return wrapHandleLocationMsgs(err)
 	}
+
+	log.Info("deserialized update location successfuly")
 
 	locationMsg := desMsg.(*location.UpdateLocationMessage)
 
@@ -652,10 +657,13 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 }
 
 func handleUpdateLocationWithTilesMsg(user string, msg *ws.Message, channel chan<- ws.GenericMsg) error {
+	log.Info("handling update location with tiles msg")
 	desMsg, err := location.DeserializeLocationMsg(msg)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
 	}
+
+	log.Info("deserialized update location with tiles successfuly")
 
 	locationMsg := desMsg.(*location.UpdateLocationWithTilesMessage)
 	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
