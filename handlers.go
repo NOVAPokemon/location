@@ -211,8 +211,9 @@ func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 	type trainersInCell struct {
-		CellID     string `json:"cell_id"`
-		TrainersNr int64  `json:"trainers_nr"`
+		CellID     string      `json:"cell_id"`
+		TrainersNr int64       `json:"trainers_nr"`
+		CellBounds [][]float64 `json:"cell_bounds"`
 	}
 
 	tmpMap := sync.Map{}
@@ -319,9 +320,9 @@ func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	serverConfigsWithBounds := make([]regionConfig, 0,len(serverConfigs))
+	serverConfigsWithBounds := make([]regionConfig, 0, len(serverConfigs))
 	for _, serverCfg := range serverConfigs {
-		cellBounds := make([][][]float64, 0,len(serverCfg.CellIdsStrings))
+		cellBounds := make([][][]float64, 0, len(serverCfg.CellIdsStrings))
 		for idx, cellToken := range serverCfg.CellIdsStrings {
 			cellRect := s2.CellFromCellID(s2.CellIDFromToken(cellToken)).RectBound()
 			points := [][]float64{
