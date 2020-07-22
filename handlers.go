@@ -308,6 +308,114 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// HandleGetActiveCells is a debug method to check if world is well subdivided
+func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
+	type activePokemon struct {
+		Id     string    `json:"pokemon_id"`
+		LatLng []float64 `json:"cell_bounds"`
+		Server string    `json:"server"`
+	}
+
+	tmpMap := sync.Map{}
+	queryServerName := mux.Vars(r)[api.ServerNamePathVar]
+	log.Info("Request to get active pokemons")
+	if queryServerName == "all" {
+		log.Info("Getting active pokemons for all servers")
+		serverConfigs, fetchErr := locationdb.GetAllServerConfigs()
+		if fetchErr != nil {
+			panic(fetchErr)
+		}
+		wg := &sync.WaitGroup{}
+		for currServerName := range serverConfigs {
+			serverAddr := currServerName
+
+			if serverAddr == serverName {
+				cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
+					cell := activeCellValue.(activeCellsValueType)
+					pokemons := cell.wildPokemons
+					pokemons.Range(func(_, value interface{}) bool {
+						pokemon := value.(utils.WildPokemonWithServer)
+						toAdd := activePokemon{
+							Id:     pokemon.Pokemon.Id.Hex(),
+							LatLng: []float64{pokemon.Location.Lat.Degrees(), pokemon.Location.Lng.Degrees()},
+							Server: pokemon.Server,
+						}
+						tmpMap.Store(toAdd.Id, toAdd)
+						return true
+					})
+					return true
+				})
+				continue
+			}
+
+			wg.Add(1)
+			go func() {
+				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, serverAddr)}
+				resp, err := http.Get(u.String())
+				if err != nil {
+					panic(err)
+				}
+				var respDecoded []activePokemon
+				err = json.NewDecoder(resp.Body).Decode(&respDecoded)
+				if err != nil {
+					panic(err)
+				}
+				for _, curr := range respDecoded {
+					tmpMap.Store(curr.Id, curr)
+				}
+				wg.Done()
+				log.Infof("Done getting active cells from server %s", serverAddr)
+			}()
+		}
+		wg.Wait()
+	} else if serverName == queryServerName {
+		log.Info("Responding with active pokemons...")
+		cm.activeCells.Range(func(cellId, activeCellValue interface{}) bool {
+			cell := activeCellValue.(activeCellsValueType)
+			pokemons := cell.wildPokemons
+			pokemons.Range(func(_, value interface{}) bool {
+				pokemon := value.(utils.WildPokemonWithServer)
+				activePokemon := activePokemon{
+					Id:     pokemon.Pokemon.Id.Hex(),
+					LatLng: []float64{pokemon.Location.Lat.Degrees(), pokemon.Location.Lng.Degrees()},
+					Server: pokemon.Server,
+				}
+				tmpMap.Store(activePokemon.Id, activePokemon)
+				return true
+			})
+			return true
+		})
+	} else {
+		u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, queryServerName)}
+		var resp *http.Response
+		resp, err := http.Get(u.String())
+		if err != nil {
+			log.Error(err)
+		}
+		var respDecoded []activePokemon
+		err = json.NewDecoder(resp.Body).Decode(&respDecoded)
+		if err != nil {
+			log.Error(err)
+		}
+		for _, pokemon := range respDecoded {
+			tmpMap.Store(pokemon.Id, pokemon)
+		}
+	}
+
+	var toSend []activePokemon
+	tmpMap.Range(func(_, pokemon interface{}) bool {
+		toSend = append(toSend, pokemon.(activePokemon))
+		return true
+	})
+
+	toWrite, err := json.Marshal(toSend)
+	if err != nil {
+		panic(err)
+	} else {
+		_, _ = w.Write(toWrite)
+	}
+}
+
 func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 
 	type regionConfig struct {

@@ -16,6 +16,7 @@ const (
 	setServerConfigsName      = "SET_SERVER_CONFIG"
 	forceLoadConfigName       = "RELOAD_SERVER_CONFIG"
 	getActiveCells            = "GET_ACTIVE_CELLS"
+	getActivePokemons         = "GET_ACTIVE_POKEMONS"
 )
 
 const (
@@ -73,5 +74,12 @@ var routes = utils.Routes{
 		Method:      get,
 		Pattern:     api.GetActiveCellsRoute,
 		HandlerFunc: handleGetActiveCells,
+	},
+
+	utils.Route{
+		Name:        getActivePokemons,
+		Method:      get,
+		Pattern:     api.GetActivePokemonsRoute,
+		HandlerFunc: handleGetActivePokemons,
 	},
 }
