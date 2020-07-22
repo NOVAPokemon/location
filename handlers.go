@@ -323,7 +323,7 @@ func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 	serverConfigsWithBounds := make([]regionConfig, 0, len(serverConfigs))
 	for _, serverCfg := range serverConfigs {
 		cellBounds := make([][][]float64, 0, len(serverCfg.CellIdsStrings))
-		for idx, cellToken := range serverCfg.CellIdsStrings {
+		for _, cellToken := range serverCfg.CellIdsStrings {
 			cellRect := s2.CellFromCellID(s2.CellIDFromToken(cellToken)).RectBound()
 			points := [][]float64{
 				{cellRect.Vertex(0).Lat.Degrees(), cellRect.Vertex(0).Lng.Degrees()},
@@ -331,7 +331,7 @@ func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 				{cellRect.Vertex(2).Lat.Degrees(), cellRect.Vertex(2).Lng.Degrees()},
 				{cellRect.Vertex(3).Lat.Degrees(), cellRect.Vertex(3).Lng.Degrees()},
 			}
-			cellBounds[idx] = points
+			cellBounds = append(cellBounds, points)
 		}
 		serverConfigsWithBounds = append(serverConfigsWithBounds, regionConfig{
 			ServerName: serverCfg.ServerName,
