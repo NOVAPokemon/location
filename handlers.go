@@ -350,7 +350,7 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 
 			wg.Add(1)
 			go func() {
-				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, serverAddr)}
+				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActivePokemons, serverAddr)}
 				resp, err := http.Get(u.String())
 				if err != nil {
 					panic(err)
@@ -375,18 +375,18 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 			pokemons := cell.wildPokemons
 			pokemons.Range(func(_, value interface{}) bool {
 				pokemon := value.(utils.WildPokemonWithServer)
-				activePokemon := activePokemon{
+				toAdd := activePokemon{
 					Id:     pokemon.Pokemon.Id.Hex(),
 					LatLng: []float64{pokemon.Location.Lat.Degrees(), pokemon.Location.Lng.Degrees()},
 					Server: pokemon.Server,
 				}
-				tmpMap.Store(activePokemon.Id, activePokemon)
+				tmpMap.Store(toAdd.Id, toAdd)
 				return true
 			})
 			return true
 		})
 	} else {
-		u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, queryServerName)}
+		u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActivePokemons, queryServerName)}
 		var resp *http.Response
 		resp, err := http.Get(u.String())
 		if err != nil {
