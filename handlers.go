@@ -30,7 +30,7 @@ import (
 )
 
 type (
-	valueType = chan ws.GenericMsg
+	valueType = chan *ws.WebsocketMsg
 )
 
 const (
@@ -505,7 +505,7 @@ func handleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleUserLocationUpdates(user string, conn *websocket.Conn) {
-	inChan := make(chan *ws.Message)
+	inChan := make(chan *ws.WebsocketMsg)
 	outChan := make(valueType)
 	finish := make(chan struct{})
 
@@ -557,7 +557,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 		case <-pingTicker.C:
 			select {
 			case <-finish:
-			case outChan <- ws.GenericMsg{MsgType: websocket.PingMessage, Data: nil}:
+			case outChan <- ws.NewControlMsg(websocket.PingMessage):
 			}
 		case <-finish:
 			log.Infof("Stopped tracking user %s location", user)
@@ -566,7 +566,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	}
 }
 
-func handleWriteLoop(conn *websocket.Conn, channel <-chan ws.GenericMsg, finished chan struct{},
+func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.WebsocketMsg, finished chan struct{},
 	writer ws.CommunicationManager) (done chan struct{}) {
 	done = make(chan struct{})
 
@@ -591,25 +591,25 @@ func handleWriteLoop(conn *websocket.Conn, channel <-chan ws.GenericMsg, finishe
 	return done
 }
 
-func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished chan struct{}) (done chan struct{}) {
+func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.WebsocketMsg,
+	finished chan struct{}) (done chan struct{}) {
 	done = make(chan struct{})
 
 	go func() {
 		defer close(done)
 		for {
-			msgBytes, err := clients.Read(conn, commsManager)
+			wsMsg, err := clients.Read(conn, commsManager)
 			if err != nil {
 				log.Warn(err)
 				return
 			}
 
-			msg, err := ws.ParseMessage(string(msgBytes))
 			if err != nil {
 				panic(err)
 				return
 			} else {
 				select {
-				case channel <- msg:
+				case channel <- wsMsg:
 				case <-finished:
 					return
 				}
@@ -620,7 +620,7 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.Message, finished
 	return done
 }
 
-func handleLocationMsg(user string, msg *ws.Message) error {
+func handleLocationMsg(user string, wsMsg *ws.WebsocketMsg) error {
 	channelGeneric, ok := clientChannels.Load(user)
 	if !ok {
 		return wrapHandleLocationMsgs(errors.New("user not registered in this server"))
@@ -628,43 +628,32 @@ func handleLocationMsg(user string, msg *ws.Message) error {
 
 	channel := channelGeneric.(valueType)
 
-	switch msg.MsgType {
+	info := wsMsg.Content.RequestTrack
+	msgData := wsMsg.Content.Data
+
+	switch wsMsg.Content.AppMsgType {
 	case location.CatchPokemon:
-		return handleCatchPokemonMsg(user, msg, channel)
+		catchPokemonMsg := msgData.(location.CatchWildPokemonMessage)
+		return handleCatchPokemonMsg(user, &catchPokemonMsg, info, channel)
 	case location.UpdateLocation:
-		return handleUpdateLocationMsg(user, msg, channel)
+		ulMsg := msgData.(location.UpdateLocationMessage)
+		return handleUpdateLocationMsg(user, &ulMsg, info, channel)
 	case location.UpdateLocationWithTiles:
-		return handleUpdateLocationWithTilesMsg(user, msg, channel)
+		ulwtMsg := msgData.(location.UpdateLocationWithTilesMessage)
+		return handleUpdateLocationWithTilesMsg(user, &ulwtMsg, info, channel)
 	default:
 		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
 	}
 }
 
-func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.GenericMsg) error {
-	desMsg, err := location.DeserializeLocationMsg(msg)
-	if err != nil {
-		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
-			Error: wrapCatchWildPokemonError(err).Error(),
-		}.SerializeToWSMessage().Serialize())
+func handleCatchPokemonMsg(user string, catchPokemonMsg *location.CatchWildPokemonMessage, info ws.TrackedInfo,
+	channel chan *ws.WebsocketMsg) error {
 
-		channel <- ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data:    msgBytes,
-		}
-		return wrapCatchWildPokemonError(err)
-	}
-
-	catchPokemonMsg := desMsg.(*location.CatchWildPokemonMessage)
 	pokeball := catchPokemonMsg.Pokeball
 	if !pokeball.IsPokeBall() {
-		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
+		channel <- location.CatchWildPokemonMessageResponse{
 			Error: wrapCatchWildPokemonError(errorInvalidItemCatch).Error(),
-		}.SerializeToWSMessage().Serialize())
-
-		channel <- ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data:    msgBytes,
-		}
+		}.ConvertToWSMessage(info)
 		return nil
 	}
 
@@ -674,28 +663,24 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 	cm.cellsOwnedLock.RLock()
 	if !cm.cellsOwned.ContainsCell(pokemonCell) {
 		cm.cellsOwnedLock.RUnlock()
-		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
-			Error: wrapCatchWildPokemonError(newPokemonNotFoundError(wildPokemon.Pokemon.Id.Hex())).Error(),
-		}.SerializeToWSMessage().Serialize())
-
-		channel <- ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data:    msgBytes,
+		err := wrapCatchWildPokemonError(newPokemonNotFoundError(wildPokemon.Pokemon.Id.Hex()))
+		if err == nil {
+			panic("error should not be nil")
 		}
+
+		channel <- location.CatchWildPokemonMessageResponse{
+			Error: err.Error(),
+		}.ConvertToWSMessage(info)
+
 		return wrapCatchWildPokemonError(err)
 	}
 	cm.cellsOwnedLock.RUnlock()
 
 	toCatch, err := cm.getPokemon(pokemonCell, catchPokemonMsg.WildPokemon)
 	if err != nil {
-		msgBytes := []byte(location.CatchWildPokemonMessageResponse{
+		channel <- location.CatchWildPokemonMessageResponse{
 			Error: wrapCatchWildPokemonError(err).Error(),
-		}.SerializeToWSMessage().Serialize())
-
-		channel <- ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data:    msgBytes,
-		}
+		}.ConvertToWSMessage(info)
 		return nil
 	}
 	pokemon := toCatch.Pokemon
@@ -713,17 +698,10 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 		var trainersClient = clients.NewTrainersClient(httpClient, commsManager)
 		_, err = trainersClient.AddPokemonToTrainer(user, pokemon)
 		if err != nil {
-
-			msgBytes := []byte(location.CatchWildPokemonMessageResponse{
+			channel <- location.CatchWildPokemonMessageResponse{
 				Error: wrapHandleLocationMsgs(err).Error(),
-			}.SerializeToWSMessage().Serialize())
-
-			channel <- ws.GenericMsg{
-				MsgType: websocket.TextMessage,
-				Data:    msgBytes,
-			}
+			}.ConvertToWSMessage(info)
 			return err
-
 		}
 		pokemonTokens = make([]string, 0, len(trainersClient.PokemonTokens))
 		for _, tokenString := range trainersClient.PokemonTokens {
@@ -731,28 +709,16 @@ func handleCatchPokemonMsg(user string, msg *ws.Message, channel chan ws.Generic
 		}
 	}
 
-	msgBytes := []byte(location.CatchWildPokemonMessageResponse{
+	channel <- location.CatchWildPokemonMessageResponse{
 		Caught:        caught,
 		PokemonTokens: pokemonTokens,
 		Error:         "",
-	}.SerializeToWSMessage().Serialize())
-
-	channel <- ws.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data:    msgBytes,
-	}
+	}.ConvertToWSMessage(info)
 	return nil
 }
 
-func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.GenericMsg) error {
-	desMsg, err := location.DeserializeLocationMsg(msg)
-	if err != nil {
-		log.Info("returning update location error")
-		return wrapHandleLocationMsgs(err)
-	}
-
-	locationMsg := desMsg.(*location.UpdateLocationMessage)
-
+func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMessage, info ws.TrackedInfo,
+	channel chan<- *ws.WebsocketMsg) error {
 	log.Infof("received location update from %s at location: %+v", user, locationMsg.Location)
 
 	currCells, changed, err := cm.updateTrainerTiles(user, locationMsg.Location)
@@ -775,24 +741,18 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 			serverNames = append(serverNames, serverNameAux)
 		}
 
-		channel <- ws.GenericMsg{
-			MsgType: websocket.TextMessage,
-			Data: []byte(location.ServersMessage{
-				Servers: serverNames,
-			}.SerializeToWSMessage().Serialize()),
-		}
+		channel <- location.ServersMessage{
+			Servers: serverNames,
+		}.ConvertToWSMessage(info)
 	}
 
 	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
-	channel <- ws.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data: []byte(location.CellsPerServerMessage{
-			CellsPerServer: cellsPerServer,
-			OriginServer:   myServer,
-		}.SerializeToWSMessage().Serialize()),
-	}
+	channel <- location.CellsPerServerMessage{
+		CellsPerServer: cellsPerServer,
+		OriginServer:   myServer,
+	}.ConvertToWSMessage(info)
 
-	err = answerToLocationMsg(channel, cellsPerServer, myServer)
+	err = answerToLocationMsg(channel, info, cellsPerServer, myServer)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
 	}
@@ -800,21 +760,17 @@ func handleUpdateLocationMsg(user string, msg *ws.Message, channel chan<- ws.Gen
 	return nil
 }
 
-func handleUpdateLocationWithTilesMsg(user string, msg *ws.Message, channel chan<- ws.GenericMsg) error {
-	desMsg, err := location.DeserializeLocationMsg(msg)
-	if err != nil {
-		return wrapHandleLocationMsgs(err)
-	}
-
-	locationMsg := desMsg.(*location.UpdateLocationWithTilesMessage)
+func handleUpdateLocationWithTilesMsg(user string, ulMsg *location.UpdateLocationWithTilesMessage, info ws.TrackedInfo,
+	channel chan<- *ws.WebsocketMsg) error {
 	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
 
-	log.Infof("received precomputed location update from %s with %v\n", user, locationMsg.CellsPerServer)
+	log.Infof("received precomputed location update from %s with %v\n", user, ulMsg.CellsPerServer)
 
-	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, locationMsg.CellsPerServer, myServer))
+	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, info, ulMsg.CellsPerServer, myServer))
 }
 
-func answerToLocationMsg(channel chan<- ws.GenericMsg, cellsPerServer map[string]s2.CellUnion, myServer string) error {
+func answerToLocationMsg(channel chan<- *ws.WebsocketMsg, info ws.TrackedInfo, cellsPerServer map[string]s2.CellUnion,
+	myServer string) error {
 	cells := cellsPerServer[myServer]
 
 	if len(cells) == 0 {
@@ -825,17 +781,11 @@ func answerToLocationMsg(channel chan<- ws.GenericMsg, cellsPerServer map[string
 	pokemonInVicinity := cm.getPokemonsInCells(cells)
 
 	log.Info("Sending reply to channel")
-	channel <- ws.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data:    []byte(location.GymsMessage{Gyms: gymsInVicinity}.SerializeToWSMessage().Serialize()),
-	}
+	channel <- location.GymsMessage{Gyms: gymsInVicinity}.ConvertToWSMessage(info)
 
-	channel <- ws.GenericMsg{
-		MsgType: websocket.TextMessage,
-		Data: []byte(location.PokemonMessage{
-			Pokemon: pokemonInVicinity,
-		}.SerializeToWSMessage().Serialize()),
-	}
+	channel <- location.PokemonMessage{
+		Pokemon: pokemonInVicinity,
+	}.ConvertToWSMessage(info)
 	log.Info("done")
 
 	return nil
