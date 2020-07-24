@@ -628,7 +628,7 @@ func handleLocationMsg(user string, wsMsg *ws.WebsocketMsg) error {
 
 	channel := channelGeneric.(valueType)
 
-	info := wsMsg.Content.RequestTrack
+	info := *wsMsg.Content.RequestTrack
 	msgData := wsMsg.Content.Data
 
 	switch wsMsg.Content.AppMsgType {
