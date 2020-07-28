@@ -337,7 +337,7 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 					pokemons.Range(func(_, value interface{}) bool {
 						pokemon := value.(utils.WildPokemonWithServer)
 						toAdd := activePokemon{
-							Id:     pokemon.Pokemon.Id.Hex(),
+							Id:     pokemon.Pokemon.Id,
 							LatLng: []float64{pokemon.Location.Lat.Degrees(), pokemon.Location.Lng.Degrees()},
 							Server: pokemon.Server,
 						}
@@ -377,7 +377,7 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 			pokemons.Range(func(_, value interface{}) bool {
 				pokemon := value.(utils.WildPokemonWithServer)
 				toAdd := activePokemon{
-					Id:     pokemon.Pokemon.Id.Hex(),
+					Id:     pokemon.Pokemon.Id,
 					LatLng: []float64{pokemon.Location.Lat.Degrees(), pokemon.Location.Lng.Degrees()},
 					Server: pokemon.Server,
 				}
@@ -677,7 +677,7 @@ func handleCatchPokemonMsg(user string, catchPokemonMsg *location.CatchWildPokem
 	cm.cellsOwnedLock.RLock()
 	if !cm.cellsOwned.ContainsCell(pokemonCell) {
 		cm.cellsOwnedLock.RUnlock()
-		err := wrapCatchWildPokemonError(newPokemonNotFoundError(wildPokemon.Pokemon.Id.Hex()))
+		err := wrapCatchWildPokemonError(newPokemonNotFoundError(wildPokemon.Pokemon.Id))
 		if err == nil {
 			panic("error should not be nil")
 		}

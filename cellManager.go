@@ -209,7 +209,7 @@ func (cm *cellManager) removeWildPokemonFromCell(activeCellID s2.Cell, toDelete 
 	if cell.removePokemon(toDelete) {
 		return &toDelete, nil
 	} else {
-		return nil, newPokemonNotFoundError(toDelete.Pokemon.Id.Hex())
+		return nil, newPokemonNotFoundError(toDelete.Pokemon.Id)
 	}
 }
 
@@ -224,7 +224,7 @@ func (cm *cellManager) getPokemon(activeCellID s2.Cell, pokemon utils.WildPokemo
 	if pokemonInCell, ok = cell.getPokemon(pokemon); ok {
 		return pokemonInCell, nil
 	} else {
-		return nil, newPokemonNotFoundError(pokemonInCell.Pokemon.Id.Hex())
+		return nil, newPokemonNotFoundError(pokemonInCell.Pokemon.Id)
 	}
 }
 
