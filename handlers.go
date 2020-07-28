@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/mitchellh/mapstructure"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -633,14 +634,27 @@ func handleLocationMsg(user string, wsMsg *ws.WebsocketMsg) error {
 
 	switch wsMsg.Content.AppMsgType {
 	case location.CatchPokemon:
-		catchPokemonMsg := msgData.(location.CatchWildPokemonMessage)
-		return handleCatchPokemonMsg(user, &catchPokemonMsg, info, channel)
+
+		catchPokemonMsg := &location.CatchWildPokemonMessage{}
+		err := mapstructure.Decode(msgData, &catchPokemonMsg)
+		if err != nil {
+			panic(err)
+		}
+		return handleCatchPokemonMsg(user, catchPokemonMsg, info, channel)
 	case location.UpdateLocation:
-		ulMsg := msgData.(location.UpdateLocationMessage)
-		return handleUpdateLocationMsg(user, &ulMsg, info, channel)
+		ulMsg := &location.UpdateLocationMessage{}
+		err := mapstructure.Decode(msgData, &ulMsg)
+		if err != nil {
+			panic(err)
+		}
+		return handleUpdateLocationMsg(user, ulMsg, info, channel)
 	case location.UpdateLocationWithTiles:
-		ulwtMsg := msgData.(location.UpdateLocationWithTilesMessage)
-		return handleUpdateLocationWithTilesMsg(user, &ulwtMsg, info, channel)
+		ulwtMsg := &location.UpdateLocationWithTilesMessage{}
+		err := mapstructure.Decode(msgData, &ulwtMsg)
+		if err != nil {
+			panic(err)
+		}
+		return handleUpdateLocationWithTilesMsg(user, ulwtMsg, info, channel)
 	default:
 		return wrapHandleLocationMsgs(ws.ErrorInvalidMessageType)
 	}
