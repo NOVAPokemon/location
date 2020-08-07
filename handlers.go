@@ -4,11 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"io/ioutil"
 	"math/rand"
-	http "github.com/bruno-anjos/archimedesHTTPClient"
-	originalHttp "net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -16,6 +13,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	http "github.com/bruno-anjos/archimedesHTTPClient"
+	"github.com/mitchellh/mapstructure"
 
 	"github.com/golang/geo/s2"
 
@@ -154,7 +154,7 @@ func refreshBoundariesPeriodic() {
 	}
 }
 
-func handleAddGymLocation(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleAddGymLocation(w http.ResponseWriter, r *http.Request) {
 	var gym utils.GymWithServer
 	err := json.NewDecoder(r.Body).Decode(&gym)
 	if err != nil {
@@ -175,7 +175,7 @@ func handleAddGymLocation(w originalHttp.ResponseWriter, r *originalHttp.Request
 	}
 }
 
-func handleUserLocation(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleUserLocation(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		err = wrapUserLocationError(ws.WrapUpgradeConnectionError(err))
@@ -192,7 +192,7 @@ func handleUserLocation(w originalHttp.ResponseWriter, r *originalHttp.Request) 
 	handleUserLocationUpdates(authToken.Username, conn)
 }
 
-func handleSetServerConfigs(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 	configAux := &utils.LocationServerCells{}
 	servername := mux.Vars(r)[api.ServerNamePathVar]
 	err := json.NewDecoder(r.Body).Decode(configAux)
@@ -210,7 +210,7 @@ func handleSetServerConfigs(w originalHttp.ResponseWriter, r *originalHttp.Reque
 }
 
 // HandleGetActiveCells is a debug method to check if world is well subdivided
-func handleGetActiveCells(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 	type trainersInCell struct {
 		CellID     string      `json:"cell_id"`
@@ -311,7 +311,7 @@ func handleGetActiveCells(w originalHttp.ResponseWriter, r *originalHttp.Request
 }
 
 // HandleGetActiveCells is a debug method to check if world is well subdivided
-func handleGetActivePokemons(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 	type activePokemon struct {
 		Id     string    `json:"pokemon_id"`
 		LatLng []float64 `json:"cell_bounds"`
@@ -418,7 +418,7 @@ func handleGetActivePokemons(w originalHttp.ResponseWriter, r *originalHttp.Requ
 	}
 }
 
-func handleGetGlobalRegionSettings(w originalHttp.ResponseWriter, _ *originalHttp.Request) {
+func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 
 	type regionConfig struct {
 		ServerName string
@@ -456,7 +456,7 @@ func handleGetGlobalRegionSettings(w originalHttp.ResponseWriter, _ *originalHtt
 	_, _ = w.Write(toSend)
 }
 
-func handleGetServerForLocation(w originalHttp.ResponseWriter, r *originalHttp.Request) {
+func handleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 	latStr := r.FormValue(api.LatitudeQueryParam)
 	lonStr := r.FormValue(api.LongitudeQueryParam)
 
@@ -825,7 +825,7 @@ func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
 	return servers, nil
 }
 
-func handleForceLoadConfig(_ originalHttp.ResponseWriter, _ *originalHttp.Request) {
+func handleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
 	serverConfig, err := locationdb.GetServerConfig(serverName)
 	if err != nil {
 		log.Fatal(err)
