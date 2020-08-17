@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"math/rand"
 
+	locationdb "github.com/NOVAPokemon/utils/database/location"
 	"github.com/golang/geo/s2"
 
 	"github.com/NOVAPokemon/utils"
@@ -49,6 +50,7 @@ func main() {
 
 	pokemonSpecies = loadPokemonSpecies()
 	recordMetrics()
+	locationdb.InitLocationDBClient(*flags.ArchimedesEnabled)
 	utils.StartServer(serviceName, host, port, routes, commsManager)
 }
 
