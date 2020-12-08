@@ -62,7 +62,7 @@ func init() {
 	} else {
 		log.Fatal(wrapInit(errors.New("could not load server name")))
 	}
-	log.Info("Server name : ", serverName)
+	log.Info("Server name: ", serverName)
 
 	split := strings.Split(serverName, "-")
 	if serverNrTmp, err := strconv.ParseInt(split[len(split)-1], 10, 32); err != nil {
@@ -70,7 +70,9 @@ func init() {
 	} else {
 		serverNr = serverNrTmp
 	}
+}
 
+func initHandlers() {
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
 		serverConfig, err := locationdb.GetServerConfig(serverName)
@@ -242,7 +244,12 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 			wg.Add(1)
 			go func() {
-				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, serverAddr)}
+				resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port))
+				if err != nil {
+					log.Panic(err)
+				}
+
+				u := url.URL{Scheme: "http", Host: resolvedAddr, Path: fmt.Sprintf(api.GetActiveCells, serverAddr)}
 				resp, err := http.Get(u.String())
 				if err != nil {
 					panic(err)
@@ -268,9 +275,14 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 			return true
 		})
 	} else {
-		u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, queryServerName)}
+		resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		u := url.URL{Scheme: "http", Host: resolvedAddr, Path: fmt.Sprintf(api.GetActiveCells, queryServerName)}
 		var resp *http.Response
-		resp, err := http.Get(u.String())
+		resp, err = http.Get(u.String())
 		if err != nil {
 			log.Error(err)
 		}
@@ -352,7 +364,12 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 
 			wg.Add(1)
 			go func() {
-				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActivePokemons, serverAddr)}
+				resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port))
+				if err != nil {
+					log.Panic(err)
+				}
+
+				u := url.URL{Scheme: "http", Host: resolvedAddr, Path: fmt.Sprintf(api.GetActivePokemons, serverAddr)}
 				resp, err := http.Get(u.String())
 				if err != nil {
 					panic(err)
@@ -388,9 +405,14 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 			return true
 		})
 	} else {
-		u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActivePokemons, queryServerName)}
+		resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port))
+		if err != nil {
+			log.Panic(err)
+		}
+
+		u := url.URL{Scheme: "http", Host: resolvedAddr, Path: fmt.Sprintf(api.GetActivePokemons, queryServerName)}
 		var resp *http.Response
-		resp, err := http.Get(u.String())
+		resp, err = http.Get(u.String())
 		if err != nil {
 			log.Error(err)
 		}
