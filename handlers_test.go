@@ -57,7 +57,7 @@ func Test_getServersForCells(t *testing.T) {
 
 		for _, cell = range cells {
 			if cellIds.ContainsCellID(cell) {
-				serverAddr := fmt.Sprintf("%s.%s", serverNameAux, serviceNameHeadless)
+				serverAddr := serverNameAux
 				servers[serverAddr] = append(servers[serverAddr], cell)
 			}
 		}

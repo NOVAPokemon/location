@@ -40,23 +40,18 @@ const (
 )
 
 var (
-	cm                  *cellManager
-	serverName          string
-	serverNr            int64
-	timeoutInDuration   = time.Duration(config.Timeout) * time.Second
-	httpClient          = &http.Client{}
-	clientChannels      = sync.Map{}
-	serviceNameHeadless string
-	commsManager        ws.CommunicationManager
+	cm *cellManager
+
+	serverName string
+	serverNr   int64
+
+	timeoutInDuration = time.Duration(config.Timeout) * time.Second
+	httpClient        = &http.Client{}
+	clientChannels    = sync.Map{}
+	commsManager      ws.CommunicationManager
 )
 
 func init() {
-	if aux, exists := os.LookupEnv(utils.HeadlessServiceNameEnvVar); exists {
-		serviceNameHeadless = aux
-	} else {
-		log.Fatal("Could not load headless service name")
-	}
-
 	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
 		serverName = aux
 	} else {
@@ -244,7 +239,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 			wg.Add(1)
 			go func() {
-				resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port))
+				resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s:%d", serverAddr, port))
 				if err != nil {
 					log.Panic(err)
 				}
@@ -275,7 +270,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 			return true
 		})
 	} else {
-		resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port))
+		resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s:%d", queryServerName, port))
 		if err != nil {
 			log.Panic(err)
 		}
@@ -364,7 +359,7 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 
 			wg.Add(1)
 			go func() {
-				resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port))
+				resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s:%d", serverAddr, port))
 				if err != nil {
 					log.Panic(err)
 				}
@@ -405,7 +400,7 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 			return true
 		})
 	} else {
-		resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port))
+		resolvedAddr, _, err := httpClient.ResolveServiceInArchimedes(fmt.Sprintf("%s:%d", queryServerName, port))
 		if err != nil {
 			log.Panic(err)
 		}
@@ -479,6 +474,8 @@ func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 }
 
 func handleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
+	log.Info("handling get server for location request")
+
 	latStr := r.FormValue(api.LatitudeQueryParam)
 	lonStr := r.FormValue(api.LongitudeQueryParam)
 
@@ -783,7 +780,7 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 		}.ConvertToWSMessage(info)
 	}
 
-	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+	myServer := serverName
 	channel <- location.CellsPerServerMessage{
 		CellsPerServer: cellsPerServer,
 		OriginServer:   myServer,
@@ -799,7 +796,7 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 
 func handleUpdateLocationWithTilesMsg(user string, ulMsg *location.UpdateLocationWithTilesMessage, info ws.TrackedInfo,
 	channel chan<- *ws.WebsocketMsg) error {
-	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
+	myServer := serverName
 
 	log.Infof("received precomputed location update from %s with %v\n", user, ulMsg.CellsPerServer)
 
@@ -839,7 +836,7 @@ func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
 		cellIds := convertCellTokensToIds(configAux.CellIdsStrings)
 		for _, cellID := range cells {
 			if cellIds.ContainsCellID(cellID) {
-				serverAddr := fmt.Sprintf("%s.%s", serverNameAux, serviceNameHeadless)
+				serverAddr := serverNameAux
 				servers[serverAddr] = append(servers[serverAddr], cellID)
 			}
 		}
