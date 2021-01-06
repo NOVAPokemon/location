@@ -77,7 +77,7 @@ func (ac *activeCell) removeTrainer() int64 {
 
 func (ac *activeCell) addTrainer() int64 {
 	val := atomic.AddInt64(ac.nrTrainers, 1)
-	log.Infof("added trainer to cell %s (%d)", ac.cellID, val)
+	log.Infof("added trainer to cell %s (%d)", ac.cellID.ToToken(), val)
 	return val
 }
 

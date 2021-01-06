@@ -247,7 +247,7 @@ func (cm *cellManager) updateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 
 	for _, cellID := range cellsToAdd {
 		cm.addTrainerToCell(cellID)
-		log.Infof("User %s entered cell %s", trainerId, cellID)
+		log.Infof("User %s entered cell %s", trainerId, cellID.ToToken())
 	}
 
 	cm.lastTrainerCells.Store(trainerId, currentCells)
@@ -477,7 +477,7 @@ func (cm *cellManager) addTrainerToCell(cellID s2.CellID) {
 			cell := activeCellValue.(activeCellsValueType)
 			cell.addTrainer()
 		} else {
-			log.Infof("adding cell %s", cellID)
+			log.Infof("adding cell %s", cellID.ToToken())
 			newCell := newActiveCell(cellID, cm.pokemonCellsLevel)
 			newCell.addTrainer()
 			cm.activeCells.Store(cellID, newCell)

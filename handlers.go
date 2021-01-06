@@ -843,7 +843,12 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 		return nil
 	}
 
-	log.Infof("User %s is on %d cells: %+v", user, len(currCells), currCells)
+	currCellsPrint := make([]string, len(currCells))
+	for i, cellID := range currCells {
+		currCellsPrint[i] = cellID.ToToken()
+	}
+
+	log.Infof("User %s is on %d cells: %+v", user, len(currCells), currCellsPrint)
 
 	cellsPerServer, err := getServersForCells(currCells...)
 	if err != nil {
