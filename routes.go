@@ -17,6 +17,7 @@ const (
 	forceLoadConfigName       = "RELOAD_SERVER_CONFIG"
 	getActiveCells            = "GET_ACTIVE_CELLS"
 	getActivePokemons         = "GET_ACTIVE_POKEMONS"
+	beingRemoved              = "BEING_REMOVED"
 )
 
 const (
@@ -81,5 +82,12 @@ var routes = utils.Routes{
 		Method:      get,
 		Pattern:     api.GetActivePokemonsRoute,
 		HandlerFunc: handleGetActivePokemons,
+	},
+
+	utils.Route{
+		Name:        beingRemoved,
+		Method:      get,
+		Pattern:     api.BeingRemovedRoute,
+		HandlerFunc: handleBeingRemoved,
 	},
 }

@@ -4,12 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/rand"
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -26,9 +24,13 @@ import (
 	"github.com/NOVAPokemon/utils/tokens"
 	ws "github.com/NOVAPokemon/utils/websockets"
 	"github.com/NOVAPokemon/utils/websockets/location"
+	cedUtils "github.com/bruno-anjos/cloud-edge-deployment/pkg/utils"
+	"github.com/docker/go-connections/nat"
+	"github.com/golang/geo/s1"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
+	originalHTTP "net/http"
 )
 
 type (
@@ -43,44 +45,57 @@ var (
 	cm *cellManager
 
 	serverName string
-	serverNr   int64
 
 	timeoutInDuration = time.Duration(config.Timeout) * time.Second
-	httpClient        = &http.Client{}
+	httpClient        = &http.Client{Client: originalHTTP.Client{Timeout: clients.RequestTimeout}}
 	clientChannels    = sync.Map{}
 	commsManager      ws.CommunicationManager
+
+	externalAddr string
+
+	serverConfigs = map[string]utils.LocationServerCells{}
+	myLocation    s2.CellID
 )
 
 func init() {
-	if aux, exists := os.LookupEnv(utils.HostnameEnvVar); exists {
-		serverName = aux
-	} else {
+	var exists bool
+	if serverName, exists = os.LookupEnv(cedUtils.NodeIDEnvVarName); !exists {
 		log.Fatal(wrapInit(errors.New("could not load server name")))
 	}
-	log.Info("Server name: ", serverName)
 
-	split := strings.Split(serverName, "-")
-	if serverNrTmp, err := strconv.ParseInt(split[len(split)-1], 10, 32); err != nil {
-		log.Fatal(wrapInit(err))
-	} else {
-		serverNr = serverNrTmp
+	var locationToken string
+	if locationToken, exists = os.LookupEnv(cedUtils.LocationEnvVarName); !exists {
+		log.Panic("no location env var")
 	}
+
+	myLocation = s2.CellIDFromToken(locationToken)
+
+	var nodeIP string
+	if nodeIP, exists = os.LookupEnv(cedUtils.NodeIPEnvVarName); !exists {
+		log.Panic("no ip env var")
+	}
+
+	servicePortString, err := nat.NewPort("tcp", strconv.Itoa(utils.LocationPort))
+	if err != nil {
+		log.Panic(err)
+	}
+
+	portMapping := cedUtils.GetPortMapFromEnvVar()
+	externalPortString := portMapping[servicePortString][0].HostPort
+
+	externalAddr = fmt.Sprintf("%s:%d", nodeIP, nat.Port(externalPortString).Int())
+
+	log.Infof("Location: %s", locationToken)
+	log.Info("Server name: ", serverName)
 }
 
 func initHandlers() {
+	recalculateCells()
+
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
 		serverConfig, err := locationdb.GetServerConfig(serverName)
 		if err != nil {
-			if serverNr == 0 {
-				// if configs are missing, server 0 adds them
-				err = insertDefaultBoundariesInDB()
-				if err != nil {
-					log.Warn(wrapInit(err))
-				}
-			} else {
-				log.Warn(wrapInit(err))
-			}
 		} else {
 			var gyms []utils.GymWithServer
 			gyms, err = locationdb.GetGyms()
@@ -103,24 +118,63 @@ func initHandlers() {
 	log.Panic(wrapInit(errors.New("could not load configs from DB")))
 }
 
-func insertDefaultBoundariesInDB() error {
-	data, err := ioutil.ReadFile(defaultServerBoundariesFile)
+func recalculateCells() {
+	configs, err := locationdb.GetAllServerConfigs()
 	if err != nil {
-		return wrapLoadServerBoundaries(err)
+		log.Panic(err)
 	}
 
-	var boundaryConfigs []utils.LocationServerCells
-	err = json.Unmarshal(data, &boundaryConfigs)
-	if err != nil {
-		return wrapLoadServerBoundaries(err)
-	}
+	var myCells []string
 
-	for i := 0; i < len(boundaryConfigs); i++ {
-		if err = locationdb.UpdateServerConfig(boundaryConfigs[i].ServerName, boundaryConfigs[i]); err != nil {
-			log.Warn(wrapLoadServerBoundaries(err))
+	for currServerName, serverConfig := range configs {
+		added := map[string]struct{}{}
+
+		log.Infof("Server %s had cells %+v", currServerName, serverConfig.CellIdsStrings)
+
+		for _, cellToken := range serverConfig.CellIdsStrings {
+			cellID := s2.CellIDFromToken(cellToken)
+			myDist := cellID.LatLng().Distance(myLocation.LatLng())
+			otherDist := cellID.LatLng().Distance(s2.CellIDFromToken(serverConfig.Location).LatLng())
+
+			if myDist < otherDist {
+				myCells = append(myCells, cellToken)
+				added[cellToken] = struct{}{}
+			}
+		}
+
+		if len(added) > 0 {
+			var newServerConfig []string
+
+			for _, cellToken := range serverConfig.CellIdsStrings {
+				if _, ok := added[cellToken]; ok {
+					continue
+				}
+				newServerConfig = append(newServerConfig, cellToken)
+			}
+
+			log.Infof("Server %s has new config %+v", currServerName, newServerConfig)
+
+			serverConfig.CellIdsStrings = newServerConfig
+			err = locationdb.UpdateServerConfig(currServerName, serverConfig)
+			if err != nil {
+				log.Error(err)
+			}
 		}
 	}
-	return nil
+
+	myConfig := utils.LocationServerCells{
+		CellIdsStrings: myCells,
+		Location:       myLocation.ToToken(),
+		Addr:           externalAddr,
+		ServerName:     serverName,
+	}
+
+	log.Infof("I have cells %+v", myConfig.CellIdsStrings)
+
+	err = locationdb.UpdateServerConfig(serverName, myConfig)
+	if err != nil {
+		log.Panic(err)
+	}
 }
 
 func refreshGymsPeriodic() {
@@ -141,12 +195,23 @@ func refreshGymsPeriodic() {
 func refreshBoundariesPeriodic() {
 	for {
 		time.Sleep(time.Duration(config.UpdateConfigsInterval) * time.Second)
-		serverConfig, err := locationdb.GetServerConfig(serverName)
+		log.Debug("regreshing boundaries")
+
+		myServerConfig, err := locationdb.GetServerConfig(serverName)
 		if err != nil {
 			log.Error(err)
 		} else {
-			cells := convertCellTokensToIds(serverConfig.CellIdsStrings)
+			cells := convertCellTokensToIds(myServerConfig.CellIdsStrings)
 			cm.setServerCells(cells)
+		}
+
+		configs, err := locationdb.GetAllServerConfigs()
+		if err != nil {
+			log.Panic(err)
+		}
+
+		for currServerName, serverConfig := range configs {
+			serverConfigs[currServerName] = serverConfig
 		}
 	}
 }
@@ -208,7 +273,6 @@ func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 
 // HandleGetActiveCells is a debug method to check if world is well subdivided
 func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
-
 	type trainersInCell struct {
 		CellID     string      `json:"cell_id"`
 		TrainersNr int64       `json:"trainers_nr"`
@@ -220,12 +284,12 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	log.Info("Request to get active cells")
 	if queryServerName == "all" {
 		log.Info("Getting active cells for all servers")
-		serverConfigs, fetchErr := locationdb.GetAllServerConfigs()
+		configs, fetchErr := locationdb.GetAllServerConfigs()
 		if fetchErr != nil {
 			panic(fetchErr)
 		}
 		wg := &sync.WaitGroup{}
-		for currServerName := range serverConfigs {
+		for currServerName := range configs {
 			serverAddr := currServerName
 
 			if serverAddr == serverName {
@@ -330,12 +394,12 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 	log.Info("Request to get active pokemons")
 	if queryServerName == "all" {
 		log.Info("Getting active pokemons for all servers")
-		serverConfigs, fetchErr := locationdb.GetAllServerConfigs()
+		configs, fetchErr := locationdb.GetAllServerConfigs()
 		if fetchErr != nil {
 			panic(fetchErr)
 		}
 		wg := &sync.WaitGroup{}
-		for currServerName := range serverConfigs {
+		for currServerName := range configs {
 			serverAddr := currServerName
 
 			if serverAddr == serverName {
@@ -436,19 +500,18 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
-
 	type regionConfig struct {
 		ServerName string
 		CellIDs    []string      `json:"cell_id"`
 		CellBounds [][][]float64 `json:"cell_bounds"`
 	}
 
-	serverConfigs, err := locationdb.GetAllServerConfigs()
+	configs, err := locationdb.GetAllServerConfigs()
 	if err != nil {
 		log.Fatal(err)
 	}
-	serverConfigsWithBounds := make([]regionConfig, 0, len(serverConfigs))
-	for _, serverCfg := range serverConfigs {
+	serverConfigsWithBounds := make([]regionConfig, 0, len(configs))
+	for _, serverCfg := range configs {
 		cellBounds := make([][][]float64, 0, len(serverCfg.CellIdsStrings))
 		for _, cellToken := range serverCfg.CellIdsStrings {
 			cellRect := s2.CellFromCellID(s2.CellIDFromToken(cellToken)).RectBound()
@@ -471,6 +534,69 @@ func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
 		utils.LogAndSendHTTPError(&w, wrapGetAllConfigs(err), http.StatusInternalServerError)
 	}
 	_, _ = w.Write(toSend)
+}
+
+func handleUserLocationUpdates(user string, conn *websocket.Conn) {
+	inChan := make(chan *ws.WebsocketMsg)
+	outChan := make(valueType)
+	finish := make(chan struct{})
+
+	clientChannels.Store(user, outChan)
+
+	_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
+	conn.SetPongHandler(func(string) error {
+		// log.Warn("Received pong")
+		_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
+		return nil
+	})
+	doneReceive := handleMessagesLoop(conn, inChan, finish)
+	doneSend := handleWriteLoop(conn, outChan, finish, commsManager)
+
+	defer func() {
+		if err := cm.removeTrainerLocation(user); err != nil {
+			log.Error(err)
+		}
+
+		close(finish)
+
+		if err := conn.Close(); err != nil {
+			log.Error(err)
+		}
+
+		<-doneReceive
+		<-doneSend
+
+		close(outChan)
+		close(inChan)
+
+		clientChannels.Delete(user)
+		atomic.AddInt64(cm.totalNrTrainers, -1)
+	}()
+
+	atomic.AddInt64(cm.totalNrTrainers, 1)
+	pingTicker := time.NewTicker(time.Duration(config.Ping) * time.Second)
+	for {
+		select {
+		case msg, ok := <-inChan:
+			if !ok {
+				continue
+			}
+			err := handleLocationMsg(user, msg)
+			if err != nil {
+				log.Error(ws.WrapWritingMessageError(err))
+				return
+			}
+			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
+		case <-pingTicker.C:
+			select {
+			case <-finish:
+			case outChan <- ws.NewControlMsg(websocket.PingMessage):
+			}
+		case <-doneSend:
+			log.Infof("Disconnected user %s", user)
+			return
+		}
+	}
 }
 
 func handleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
@@ -520,70 +646,21 @@ func handleGetServerForLocation(w http.ResponseWriter, r *http.Request) {
 			utils.LogAndSendHTTPError(&w, wrapGetServerForLocation(err), http.StatusInternalServerError)
 			return
 		}
+
+		var serverConfig *utils.LocationServerCells
+		serverConfig, err = locationdb.GetServerConfig(serverName)
+		if err != nil {
+			log.Panic(err)
+		}
+
+		serverConfig.CellIdsStrings = append(serverConfig.CellIdsStrings, cell.ToToken())
+		err = locationdb.UpdateServerConfig(serverName, *serverConfig)
+		if err != nil {
+			log.Panic(err)
+		}
+
 		_, _ = w.Write(toSend)
 		return
-	}
-}
-
-func handleUserLocationUpdates(user string, conn *websocket.Conn) {
-	inChan := make(chan *ws.WebsocketMsg)
-	outChan := make(valueType)
-	finish := make(chan struct{})
-
-	clientChannels.Store(user, outChan)
-
-	_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
-	conn.SetPongHandler(func(string) error {
-		// log.Warn("Received pong")
-		_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
-		return nil
-	})
-	doneReceive := handleMessagesLoop(conn, inChan, finish)
-	doneSend := handleWriteLoop(conn, outChan, finish, commsManager)
-
-	defer func() {
-		if err := cm.removeTrainerLocation(user); err != nil {
-			log.Error(err)
-		}
-		close(finish)
-
-		if err := conn.Close(); err != nil {
-			log.Error(err)
-		}
-
-		<-doneReceive
-		<-doneSend
-
-		close(outChan)
-		close(inChan)
-
-		clientChannels.Delete(user)
-		atomic.AddInt64(cm.totalNrTrainers, -1)
-	}()
-
-	atomic.AddInt64(cm.totalNrTrainers, 1)
-	var pingTicker = time.NewTicker(time.Duration(config.Ping) * time.Second)
-	for {
-		select {
-		case msg, ok := <-inChan:
-			if !ok {
-				continue
-			}
-			err := handleLocationMsg(user, msg)
-			if err != nil {
-				log.Error(ws.WrapWritingMessageError(err))
-				return
-			}
-			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
-		case <-pingTicker.C:
-			select {
-			case <-finish:
-			case outChan <- ws.NewControlMsg(websocket.PingMessage):
-			}
-		case <-finish:
-			log.Infof("Stopped tracking user %s location", user)
-			return
-		}
 	}
 }
 
@@ -592,6 +669,7 @@ func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.WebsocketMsg, fini
 	done = make(chan struct{})
 
 	go func() {
+		defer close(done)
 		for {
 			select {
 			case msg, ok := <-channel:
@@ -601,7 +679,8 @@ func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.WebsocketMsg, fini
 
 				err := writer.WriteGenericMessageToConn(conn, msg)
 				if err != nil {
-					log.Error(ws.WrapWritingMessageError(err))
+					log.Warn(ws.WrapWritingMessageError(err))
+					return
 				}
 			case <-finished:
 				return
@@ -654,7 +733,6 @@ func handleLocationMsg(user string, wsMsg *ws.WebsocketMsg) error {
 
 	switch wsMsg.Content.AppMsgType {
 	case location.CatchPokemon:
-
 		catchPokemonMsg := &location.CatchWildPokemonMessage{}
 		err := mapstructure.Decode(msgData, &catchPokemonMsg)
 		if err != nil {
@@ -682,7 +760,6 @@ func handleLocationMsg(user string, wsMsg *ws.WebsocketMsg) error {
 
 func handleCatchPokemonMsg(user string, catchPokemonMsg *location.CatchWildPokemonMessage, info ws.TrackedInfo,
 	channel chan *ws.WebsocketMsg) error {
-
 	pokeball := catchPokemonMsg.Pokeball
 	if !pokeball.IsPokeBall() {
 		channel <- location.CatchWildPokemonMessageResponse{
@@ -729,7 +806,7 @@ func handleCatchPokemonMsg(user string, catchPokemonMsg *location.CatchWildPokem
 	caught := rand.Float64() <= catchingProbability
 	var pokemonTokens []string
 	if caught {
-		var trainersClient = clients.NewTrainersClient(httpClient, commsManager)
+		trainersClient := clients.NewTrainersClient(httpClient, commsManager)
 		_, err = trainersClient.AddPokemonToTrainer(user, pokemon)
 		if err != nil {
 			channel <- location.CatchWildPokemonMessageResponse{
@@ -755,9 +832,15 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 	channel chan<- *ws.WebsocketMsg) error {
 	log.Infof("received location update from %s at location: %+v", user, locationMsg.Location)
 
-	currCells, changed, err := cm.updateTrainerTiles(user, locationMsg.Location)
+	currCells, changed, disconnect, err := cm.updateTrainerTiles(user, locationMsg.Location)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
+	}
+
+	if disconnect {
+		log.Infof("telling %s to disconnect", user)
+		channel <- location.DisconnectMessage{Addr: externalAddr}.ConvertToWSMessage()
+		return nil
 	}
 
 	log.Infof("User %s is on %d cells: %+v", user, len(currCells), currCells)
@@ -767,9 +850,10 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 		return wrapHandleLocationMsgs(err)
 	}
 
+	log.Infof("User %s got cellsPerServer: %+v", user, cellsPerServer)
+
 	if changed {
 		var serverNames []string
-		log.Infof("User %s got cellsPerServer: %+v", user, serverNames)
 
 		for serverNameAux := range cellsPerServer {
 			serverNames = append(serverNames, serverNameAux)
@@ -780,13 +864,12 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 		}.ConvertToWSMessage(info)
 	}
 
-	myServer := serverName
 	channel <- location.CellsPerServerMessage{
 		CellsPerServer: cellsPerServer,
-		OriginServer:   myServer,
+		OriginServer:   externalAddr,
 	}.ConvertToWSMessage(info)
 
-	err = answerToLocationMsg(channel, info, cellsPerServer, myServer)
+	err = answerToLocationMsg(channel, info, cellsPerServer)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
 	}
@@ -794,20 +877,44 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 	return nil
 }
 
-func handleUpdateLocationWithTilesMsg(user string, ulMsg *location.UpdateLocationWithTilesMessage, info ws.TrackedInfo,
-	channel chan<- *ws.WebsocketMsg) error {
-	myServer := serverName
+func getServersForCells(cells ...s2.CellID) (servers map[string]s2.CellUnion, err error) {
+	servers = map[string]s2.CellUnion{}
 
-	log.Infof("received precomputed location update from %s with %v\n", user, ulMsg.CellsPerServer)
+	for _, cellID := range cells {
+		var (
+			minDist       s1.Angle
+			minServerAddr string
+			notSet        = true
+		)
 
-	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, info, ulMsg.CellsPerServer, myServer))
+		for _, serverConfig := range serverConfigs {
+			dist := cellID.LatLng().Distance(s2.CellIDFromToken(serverConfig.Location).LatLng())
+			if dist < minDist || notSet {
+				minDist = dist
+				minServerAddr = serverConfig.Addr
+				notSet = false
+			}
+		}
+
+		servers[minServerAddr] = append(servers[minServerAddr], cellID)
+	}
+
+	return servers, nil
 }
 
-func answerToLocationMsg(channel chan<- *ws.WebsocketMsg, info ws.TrackedInfo, cellsPerServer map[string]s2.CellUnion,
-	myServer string) error {
-	cells := cellsPerServer[myServer]
+func handleUpdateLocationWithTilesMsg(user string, ulMsg *location.UpdateLocationWithTilesMessage, info ws.TrackedInfo,
+	channel chan<- *ws.WebsocketMsg) error {
+	log.Infof("received precomputed location update from %s with %v\n", user, ulMsg.CellsPerServer)
+
+	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, info, ulMsg.CellsPerServer))
+}
+
+func answerToLocationMsg(channel chan<- *ws.WebsocketMsg, info ws.TrackedInfo,
+	cellsPerServer map[string]s2.CellUnion) error {
+	cells := cellsPerServer[externalAddr]
 
 	if len(cells) == 0 {
+		log.Infof("me %s %+v", externalAddr, cellsPerServer)
 		return errors.New("user contacted server that isnt responsible for any tile")
 	}
 
@@ -825,25 +932,6 @@ func answerToLocationMsg(channel chan<- *ws.WebsocketMsg, info ws.TrackedInfo, c
 	return nil
 }
 
-func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
-	configs, err := locationdb.GetAllServerConfigs() // TODO Can be optimized, instead of fetching all the configs and looping
-	if err != nil {
-		return nil, err
-	}
-
-	servers := map[string]s2.CellUnion{}
-	for serverNameAux, configAux := range configs {
-		cellIds := convertCellTokensToIds(configAux.CellIdsStrings)
-		for _, cellID := range cells {
-			if cellIds.ContainsCellID(cellID) {
-				serverAddr := serverNameAux
-				servers[serverAddr] = append(servers[serverAddr], cellID)
-			}
-		}
-	}
-	return servers, nil
-}
-
 func handleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
 	serverConfig, err := locationdb.GetServerConfig(serverName)
 	if err != nil {
@@ -851,4 +939,65 @@ func handleForceLoadConfig(_ http.ResponseWriter, _ *http.Request) {
 	}
 	cellIds := convertCellTokensToIds(serverConfig.CellIdsStrings)
 	cm.setServerCells(cellIds)
+}
+
+func handleBeingRemoved(_ http.ResponseWriter, _ *http.Request) {
+	configs, err := locationdb.GetAllServerConfigs()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	myCells := configs[serverName].CellIdsStrings
+	delete(configs, serverName)
+
+	changed := map[string][]string{}
+
+	for _, cellToken := range myCells {
+		var (
+			minDist   s1.Angle
+			minServer string
+			notSet    = true
+		)
+
+		cellID := s2.CellIDFromToken(cellToken)
+
+		for _, serverConfig := range configs {
+			dist := cellID.LatLng().Distance(s2.CellIDFromToken(serverConfig.Location).LatLng())
+			if dist < minDist || notSet {
+				minDist = dist
+				minServer = serverConfig.ServerName
+				notSet = false
+			}
+		}
+
+		changed[minServer] = append(changed[minServer], cellToken)
+	}
+
+	for server, cells := range changed {
+		configAux := configs[serverName]
+		configAux.CellIdsStrings = cells
+		err = locationdb.UpdateServerConfig(server, configAux)
+		if err != nil {
+			log.Panic(err)
+		}
+	}
+}
+
+func calculcateClosestServerToLocation(location s2.LatLng) string {
+	var (
+		closest string
+		minDist s1.Angle
+		unset   = true
+	)
+
+	for name, configAux := range serverConfigs {
+		dist := s2.CellIDFromToken(configAux.Location).LatLng().Distance(location)
+		if unset || dist < minDist {
+			minDist = dist
+			closest = name
+			unset = false
+		}
+	}
+
+	return closest
 }

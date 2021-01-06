@@ -51,7 +51,6 @@ type cellManager struct {
 }
 
 func newCellManager(gyms []utils.GymWithServer, config *locationServerConfig, cellsOwned s2.CellUnion) *cellManager {
-
 	if config.GymsCellLevel > config.PokemonCellLevel {
 		panic("invalid configs")
 	}
@@ -134,9 +133,7 @@ func (cm *cellManager) getPokemonsInCells(cellIds s2.CellUnion) []utils.WildPoke
 }
 
 func (cm *cellManager) getGymsInCells(cellIds s2.CellUnion) []utils.GymWithServer {
-	var (
-		gymsInCells []utils.GymWithServer
-	)
+	var gymsInCells []utils.GymWithServer
 
 	cellIdsNormalized := expandUnionToLevel(cellIds, cm.gymsCellLevel)
 
@@ -199,7 +196,8 @@ func (cm *cellManager) generateWildPokemonsForServerPeriodically() {
 	}
 }
 
-func (cm *cellManager) removeWildPokemonFromCell(activeCellID s2.Cell, toDelete utils.WildPokemonWithServer) (*utils.WildPokemonWithServer, error) {
+func (cm *cellManager) removeWildPokemonFromCell(activeCellID s2.Cell,
+	toDelete utils.WildPokemonWithServer) (*utils.WildPokemonWithServer, error) {
 	activeCellInterface, ok := cm.activeCells.Load(activeCellID)
 	if !ok {
 		return nil, errors.New("cell non existing")
@@ -213,7 +211,8 @@ func (cm *cellManager) removeWildPokemonFromCell(activeCellID s2.Cell, toDelete 
 	}
 }
 
-func (cm *cellManager) getPokemon(activeCellID s2.Cell, pokemon utils.WildPokemonWithServer) (*utils.WildPokemonWithServer, error) {
+func (cm *cellManager) getPokemon(activeCellID s2.Cell,
+	pokemon utils.WildPokemonWithServer) (*utils.WildPokemonWithServer, error) {
 	activeCellInterface, ok := cm.activeCells.Load(activeCellID)
 	if !ok {
 		return nil, errors.New("cell non existing")
@@ -230,11 +229,16 @@ func (cm *cellManager) getPokemon(activeCellID s2.Cell, pokemon utils.WildPokemo
 
 // auxiliary functions
 
-func (cm *cellManager) updateTrainerTiles(trainerId string, loc s2.LatLng) (s2.CellUnion, bool, error) {
-	cellsToRemove, cellsToAdd, currentCells, err := cm.calculateLocationTileChanges(trainerId, loc)
+func (cm *cellManager) updateTrainerTiles(trainerId string, loc s2.LatLng) (s2.CellUnion, bool, bool, error) {
+	cellsToRemove, cellsToAdd, currentCells, disconnect, err := cm.calculateLocationTileChanges(trainerId, loc)
 	if err != nil {
-		return nil, false, err
+		return nil, false, false, err
 	}
+
+	if disconnect {
+		return nil, false, true, nil
+	}
+
 	changed := len(cellsToRemove) > 0 || len(cellsToAdd) > 0
 	for _, cellID := range cellsToRemove {
 		log.Infof("User %s left cell %d", trainerId, cellID)
@@ -243,26 +247,28 @@ func (cm *cellManager) updateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 
 	for _, cellID := range cellsToAdd {
 		cm.addTrainerToCell(cellID)
+		log.Infof("User %s entered cell %s", trainerId, cellID)
 	}
 
 	cm.lastTrainerCells.Store(trainerId, currentCells)
-	return currentCells, changed, nil
+	return currentCells, changed, false, nil
 }
 
 func (cm *cellManager) calculateLocationTileChanges(trainerId string, userLoc s2.LatLng) (toRemove, toAdd,
-	currentTiles s2.CellUnion, err error) {
+	currentTiles s2.CellUnion, disconnect bool, err error) {
 	exitTileCap := calculateCapForLocation(userLoc, float64(cm.exitBoundarySize))
 
 	// calc cells around user for exit boundary
 	newExitCellIds := cm.trainersRegionCoverer.Covering(s2.Region(exitTileCap))
 	log.Infof("User exit region covers %d cells", len(newExitCellIds))
-	cm.cellsOwnedLock.RLock()
-	if !newExitCellIds.Intersects(cm.cellsOwned) {
-		cm.cellsOwnedLock.RUnlock()
-		return nil, nil, nil,
-			errors.New("server cells do not intersect client exit boundaries")
+
+	closest := calculcateClosestServerToLocation(userLoc)
+	if closest != serverName {
+		log.Infof("closest was %s, i'm %s", closest, serverName)
+
+		return nil, nil, nil, true, nil
 	}
-	cm.cellsOwnedLock.RUnlock()
+
 	entryTileCap := calculateCapForLocation(userLoc, float64(cm.entryBoundarySize))
 
 	// calc cells around user for entry boundary
@@ -289,7 +295,7 @@ func (cm *cellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 	// adds tiles to keep and new tiles to load in orded to return which cells user should load
 	currentTiles = s2.CellUnionFromUnion(toAdd, cellsToKeep)
 
-	return toRemove, toAdd, currentTiles, nil
+	return toRemove, toAdd, currentTiles, false, nil
 }
 
 func calculateCapForLocation(latLon s2.LatLng, boundarySize float64) s2.Cap {
@@ -365,14 +371,12 @@ func (cm *CellManager) logTileManagerState() {
 */
 
 func (cm *cellManager) addGym(gymWithSrv utils.GymWithServer) error {
-	cellId := s2.CellIDFromLatLng(gymWithSrv.Gym.Location)
-
-	cm.cellsOwnedLock.RLock()
-	if !cm.cellsOwned.ContainsCellID(cellId) {
-		cm.cellsOwnedLock.RUnlock()
+	closest := calculcateClosestServerToLocation(gymWithSrv.Gym.Location)
+	if closest != serverName {
 		return errors.New("out of bounds of server")
 	}
-	cm.cellsOwnedLock.RUnlock()
+
+	cellId := s2.CellIDFromLatLng(gymWithSrv.Gym.Location)
 
 	cellIdAtGymsLevel := cellId.Parent(cm.gymsCellLevel)
 	gymsInterface, ok := cm.gymsInCell.Load(cellIdAtGymsLevel)
@@ -425,11 +429,13 @@ func (cm *cellManager) logActiveGymsPeriodic() {
 }
 
 func (cm *cellManager) removeTrainerFromCell(cellID s2.CellID) {
+	log.Infof("will delete cell %s", cellID)
 	if activeCellValue, ok := cm.activeCells.Load(cellID); ok {
 		cell := activeCellValue.(activeCellsValueType)
 		var nrTrainersInTile int64
 		nrTrainersInTile = cell.removeTrainer()
 		if nrTrainersInTile == 0 {
+			log.Infof("cell %s has 0 trainers", cellID)
 			cm.changeTrainerCellsLock.Lock() // ensures no one else is creating or deleting the tile
 			var cellValue interface{}
 			if cellValue, ok = cm.activeCells.Load(cellID); ok {
@@ -440,7 +446,7 @@ func (cm *cellManager) removeTrainerFromCell(cellID s2.CellID) {
 				}
 				cell.releaseWriteLock()
 			} else {
-				panic("Tried to delete a cell that was deleted in the meantime, which shouldn't happen")
+				log.Info("cell deleted in the meantime")
 			}
 			cm.changeTrainerCellsLock.Unlock()
 		}
@@ -459,6 +465,7 @@ func (cm *cellManager) addTrainerToCell(cellID s2.CellID) {
 			cell.addTrainer()
 		} else { // cell was deleted in the meantime, try to add again
 			cell.releaseReadLock()
+			// dumb recursion
 			cm.addTrainerToCell(cellID)
 			return
 		}
@@ -470,6 +477,7 @@ func (cm *cellManager) addTrainerToCell(cellID s2.CellID) {
 			cell := activeCellValue.(activeCellsValueType)
 			cell.addTrainer()
 		} else {
+			log.Infof("adding cell %s", cellID)
 			newCell := newActiveCell(cellID, cm.pokemonCellsLevel)
 			newCell.addTrainer()
 			cm.activeCells.Store(cellID, newCell)

@@ -1,26 +1,26 @@
 [
   {
-    "ServerName": "location-0",
+    "ServerName": "dummy0",
     "cells": [
       "1",
       "9"
     ]
   },
   {
-    "ServerName": "location-1",
+    "ServerName": "dummy1",
     "cells": [
       "3",
       "b"
     ]
   },
   {
-    "ServerName": "location-2",
+    "ServerName": "dummy2",
     "cells": [
       "5"
     ]
   },
   {
-    "ServerName": "location-3",
+    "ServerName": "dummy3",
     "cells": [
       "7"
     ]
