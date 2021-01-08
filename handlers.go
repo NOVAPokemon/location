@@ -554,7 +554,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 	defer func() {
 		if err := cm.removeTrainerLocation(user); err != nil {
-			log.Error(err)
+			log.Warn(err)
 		}
 
 		close(finish)
@@ -593,7 +593,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			case outChan <- ws.NewControlMsg(websocket.PingMessage):
 			}
 		case <-doneSend:
-			log.Infof("Disconnected user %s", user)
+			log.Infof("disconnected user %s", user)
 			return
 		}
 	}
