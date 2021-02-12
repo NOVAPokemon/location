@@ -35,6 +35,9 @@ import (
 
 type (
 	valueType = chan *ws.WebsocketMsg
+
+	serverConfigsKeyType   = string
+	serverConfigsValueType = *utils.LocationServerCells
 )
 
 const (
@@ -53,7 +56,7 @@ var (
 
 	externalAddr string
 
-	serverConfigs = map[string]utils.LocationServerCells{}
+	serverConfigs = sync.Map{}
 	myLocation    s2.CellID
 )
 
@@ -91,6 +94,8 @@ func init() {
 
 func initHandlers() {
 	recalculateCells()
+
+	log.SetLevel(log.DebugLevel)
 
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
@@ -194,8 +199,7 @@ func refreshGymsPeriodic() {
 
 func refreshBoundariesPeriodic() {
 	for {
-		time.Sleep(time.Duration(config.UpdateConfigsInterval) * time.Second)
-		log.Debug("regreshing boundaries")
+		log.Debug("refreshing boundaries")
 
 		myServerConfig, err := locationdb.GetServerConfig(serverName)
 		if err != nil {
@@ -211,8 +215,22 @@ func refreshBoundariesPeriodic() {
 		}
 
 		for currServerName, serverConfig := range configs {
-			serverConfigs[currServerName] = serverConfig
+			serverConfigs.Store(currServerName, &serverConfig)
 		}
+
+		auxServerConfigs := map[serverConfigsKeyType]serverConfigsValueType{}
+		serverConfigs.Range(func(key, value interface{}) bool {
+			typedKey := key.(serverConfigsKeyType)
+			typedValue := value.(serverConfigsValueType)
+
+			auxServerConfigs[typedKey] = typedValue
+
+			return true
+		})
+
+		log.Debugf("boundaries: %+v", auxServerConfigs)
+
+		time.Sleep(time.Duration(config.UpdateConfigsInterval) * time.Second)
 	}
 }
 
@@ -583,7 +601,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 			}
 			err := handleLocationMsg(user, msg)
 			if err != nil {
-				log.Error(ws.WrapWritingMessageError(err))
+				log.Warn(ws.WrapWritingMessageError(err))
 				return
 			}
 			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
@@ -874,9 +892,9 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 		OriginServer:   externalAddr,
 	}.ConvertToWSMessage(info)
 
-	err = answerToLocationMsg(channel, info, cellsPerServer)
+	err = answerToLocationMsg(channel, info, cellsPerServer, user)
 	if err != nil {
-		return wrapHandleLocationMsgs(err)
+		log.Warn(wrapHandleLocationMsgs(err))
 	}
 
 	return nil
@@ -892,14 +910,18 @@ func getServersForCells(cells ...s2.CellID) (servers map[string]s2.CellUnion, er
 			notSet        = true
 		)
 
-		for _, serverConfig := range serverConfigs {
+		serverConfigs.Range(func(key, value interface{}) bool {
+			serverConfig := value.(serverConfigsValueType)
+
 			dist := cellID.LatLng().Distance(s2.CellIDFromToken(serverConfig.Location).LatLng())
 			if dist < minDist || notSet {
 				minDist = dist
 				minServerAddr = serverConfig.Addr
 				notSet = false
 			}
-		}
+
+			return true
+		})
 
 		servers[minServerAddr] = append(servers[minServerAddr], cellID)
 	}
@@ -911,16 +933,16 @@ func handleUpdateLocationWithTilesMsg(user string, ulMsg *location.UpdateLocatio
 	channel chan<- *ws.WebsocketMsg) error {
 	log.Infof("received precomputed location update from %s with %v\n", user, ulMsg.CellsPerServer)
 
-	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, info, ulMsg.CellsPerServer))
+	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, info, ulMsg.CellsPerServer, user))
 }
 
 func answerToLocationMsg(channel chan<- *ws.WebsocketMsg, info ws.TrackedInfo,
-	cellsPerServer map[string]s2.CellUnion) error {
+	cellsPerServer map[string]s2.CellUnion, user string) error {
 	cells := cellsPerServer[externalAddr]
 
 	if len(cells) == 0 {
-		log.Infof("me %s %+v", externalAddr, cellsPerServer)
-		return errors.New("user contacted server that isnt responsible for any tile")
+		log.Infof("(%s) me %s %+v", user, externalAddr, cellsPerServer)
+		return errors.New(fmt.Sprintf("user %s contacted server that isnt responsible for any tile", user))
 	}
 
 	gymsInVicinity := cm.getGymsInCells(cells)
@@ -995,14 +1017,19 @@ func calculcateClosestServerToLocation(location s2.LatLng) string {
 		unset   = true
 	)
 
-	for name, configAux := range serverConfigs {
+	serverConfigs.Range(func(key, value interface{}) bool {
+		name := key.(serverConfigsKeyType)
+		configAux := value.(serverConfigsValueType)
+
 		dist := s2.CellIDFromToken(configAux.Location).LatLng().Distance(location)
 		if unset || dist < minDist {
 			minDist = dist
 			closest = name
 			unset = false
 		}
-	}
+
+		return true
+	})
 
 	return closest
 }
