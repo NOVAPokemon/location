@@ -117,6 +117,9 @@ func initHandlers() {
 			go cm.generateWildPokemonsForServerPeriodically()
 			go refreshBoundariesPeriodic()
 			go refreshGymsPeriodic()
+
+			refreshBoundaries()
+
 			return
 		}
 	}
@@ -197,39 +200,43 @@ func refreshGymsPeriodic() {
 	}
 }
 
+func refreshBoundaries() {
+	log.Debug("refreshing boundaries")
+
+	myServerConfig, err := locationdb.GetServerConfig(serverName)
+	if err != nil {
+		log.Error(err)
+	} else {
+		cells := convertCellTokensToIds(myServerConfig.CellIdsStrings)
+		cm.setServerCells(cells)
+	}
+
+	configs, err := locationdb.GetAllServerConfigs()
+	if err != nil {
+		log.Panic(err)
+	}
+
+	for currServerName, serverConfig := range configs {
+		serverConfigCopy := serverConfig
+		serverConfigs.Store(currServerName, &serverConfigCopy)
+	}
+
+	auxServerConfigs := map[serverConfigsKeyType]serverConfigsValueType{}
+	serverConfigs.Range(func(key, value interface{}) bool {
+		typedKey := key.(serverConfigsKeyType)
+		typedValue := value.(serverConfigsValueType)
+
+		auxServerConfigs[typedKey] = typedValue
+
+		return true
+	})
+
+	log.Debugf("boundaries: %+v", auxServerConfigs)
+}
+
 func refreshBoundariesPeriodic() {
 	for {
-		log.Debug("refreshing boundaries")
-
-		myServerConfig, err := locationdb.GetServerConfig(serverName)
-		if err != nil {
-			log.Error(err)
-		} else {
-			cells := convertCellTokensToIds(myServerConfig.CellIdsStrings)
-			cm.setServerCells(cells)
-		}
-
-		configs, err := locationdb.GetAllServerConfigs()
-		if err != nil {
-			log.Panic(err)
-		}
-
-		for currServerName, serverConfig := range configs {
-			serverConfigs.Store(currServerName, &serverConfig)
-		}
-
-		auxServerConfigs := map[serverConfigsKeyType]serverConfigsValueType{}
-		serverConfigs.Range(func(key, value interface{}) bool {
-			typedKey := key.(serverConfigsKeyType)
-			typedValue := value.(serverConfigsValueType)
-
-			auxServerConfigs[typedKey] = typedValue
-
-			return true
-		})
-
-		log.Debugf("boundaries: %+v", auxServerConfigs)
-
+		refreshBoundaries()
 		time.Sleep(time.Duration(config.UpdateConfigsInterval) * time.Second)
 	}
 }
@@ -948,12 +955,16 @@ func answerToLocationMsg(channel chan<- *ws.WebsocketMsg, info ws.TrackedInfo,
 	gymsInVicinity := cm.getGymsInCells(cells)
 	pokemonInVicinity := cm.getPokemonsInCells(cells)
 
-	log.Info("Sending reply to channel")
-	channel <- location.GymsMessage{Gyms: gymsInVicinity}.ConvertToWSMessage(info)
-
-	channel <- location.PokemonMessage{
+	gymsMsg := location.GymsMessage{Gyms: gymsInVicinity}.ConvertToWSMessage(info)
+	pokemonsMsg := location.PokemonMessage{
 		Pokemon: pokemonInVicinity,
 	}.ConvertToWSMessage(info)
+
+	log.Infof("Sending reply to channel %+v, %+v", gymsMsg, pokemonsMsg)
+
+	channel <- gymsMsg
+
+	channel <- pokemonsMsg
 	log.Info("done")
 
 	return nil
