@@ -51,7 +51,6 @@ type cellManager struct {
 }
 
 func newCellManager(gyms []utils.GymWithServer, config *locationServerConfig, cellsOwned s2.CellUnion) *cellManager {
-
 	if config.GymsCellLevel > config.PokemonCellLevel {
 		panic("invalid configs")
 	}
@@ -134,9 +133,7 @@ func (cm *cellManager) getPokemonsInCells(cellIds s2.CellUnion) []utils.WildPoke
 }
 
 func (cm *cellManager) getGymsInCells(cellIds s2.CellUnion) []utils.GymWithServer {
-	var (
-		gymsInCells []utils.GymWithServer
-	)
+	var gymsInCells []utils.GymWithServer
 
 	cellIdsNormalized := expandUnionToLevel(cellIds, cm.gymsCellLevel)
 
@@ -288,6 +285,7 @@ func (cm *cellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 
 	// adds tiles to keep and new tiles to load in orded to return which cells user should load
 	currentTiles = s2.CellUnionFromUnion(toAdd, cellsToKeep)
+	currentTiles.Denormalize(cm.trainersCellsLevel, 1)
 
 	return toRemove, toAdd, currentTiles, nil
 }

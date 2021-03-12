@@ -43,12 +43,12 @@ func main() {
 	if !*flags.DelayedComms {
 		commsManager = utils.CreateDefaultCommunicationManager()
 	} else {
-		locationTag := utils.GetLocationTag(utils.DefaultLocationTagsFilename, serverName)
-		commsManager = utils.CreateDefaultDelayedManager(locationTag, false)
+		commsManager = utils.CreateDefaultDelayedManager(false)
 	}
 
 	pokemonSpecies = loadPokemonSpecies()
 	recordMetrics()
+	initHandlers()
 	utils.StartServer(serviceName, host, port, routes, commsManager)
 }
 

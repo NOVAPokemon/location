@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/mitchellh/mapstructure"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -15,6 +14,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/mitchellh/mapstructure"
 
 	"github.com/golang/geo/s2"
 
@@ -43,7 +44,7 @@ var (
 	serverName          string
 	serverNr            int64
 	timeoutInDuration   = time.Duration(config.Timeout) * time.Second
-	httpClient          = &http.Client{}
+	httpClient          = &http.Client{Timeout: clients.RequestTimeout}
 	clientChannels      = sync.Map{}
 	serviceNameHeadless string
 	commsManager        ws.CommunicationManager
@@ -61,7 +62,7 @@ func init() {
 	} else {
 		log.Fatal(wrapInit(errors.New("could not load server name")))
 	}
-	log.Info("Server name : ", serverName)
+	log.Info("Server name: ", serverName)
 
 	split := strings.Split(serverName, "-")
 	if serverNrTmp, err := strconv.ParseInt(split[len(split)-1], 10, 32); err != nil {
@@ -69,7 +70,9 @@ func init() {
 	} else {
 		serverNr = serverNrTmp
 	}
+}
 
+func initHandlers() {
 	for i := 0; i < 5; i++ {
 		time.Sleep(time.Duration(5*i) * time.Second)
 		serverConfig, err := locationdb.GetServerConfig(serverName)
@@ -210,7 +213,6 @@ func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 
 // HandleGetActiveCells is a debug method to check if world is well subdivided
 func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
-
 	type trainersInCell struct {
 		CellID     string      `json:"cell_id"`
 		TrainersNr int64       `json:"trainers_nr"`
@@ -418,7 +420,6 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGetGlobalRegionSettings(w http.ResponseWriter, _ *http.Request) {
-
 	type regionConfig struct {
 		ServerName string
 		CellIDs    []string      `json:"cell_id"`
@@ -523,7 +524,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 	defer func() {
 		if err := cm.removeTrainerLocation(user); err != nil {
-			log.Error(err)
+			log.Warn(err)
 		}
 		close(finish)
 
@@ -542,7 +543,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	}()
 
 	atomic.AddInt64(cm.totalNrTrainers, 1)
-	var pingTicker = time.NewTicker(time.Duration(config.Ping) * time.Second)
+	pingTicker := time.NewTicker(time.Duration(config.Ping) * time.Second)
 	for {
 		select {
 		case msg, ok := <-inChan:
@@ -662,7 +663,6 @@ func handleLocationMsg(user string, wsMsg *ws.WebsocketMsg) error {
 
 func handleCatchPokemonMsg(user string, catchPokemonMsg *location.CatchWildPokemonMessage, info ws.TrackedInfo,
 	channel chan *ws.WebsocketMsg) error {
-
 	pokeball := catchPokemonMsg.Pokeball
 	if !pokeball.IsPokeBall() {
 		channel <- location.CatchWildPokemonMessageResponse{
@@ -709,7 +709,7 @@ func handleCatchPokemonMsg(user string, catchPokemonMsg *location.CatchWildPokem
 	caught := rand.Float64() <= catchingProbability
 	var pokemonTokens []string
 	if caught {
-		var trainersClient = clients.NewTrainersClient(httpClient, commsManager)
+		trainersClient := clients.NewTrainersClient(httpClient, commsManager)
 		_, err = trainersClient.AddPokemonToTrainer(user, pokemon)
 		if err != nil {
 			channel <- location.CatchWildPokemonMessageResponse{
