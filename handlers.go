@@ -45,6 +45,7 @@ var (
 	serverNr            int64
 	timeoutInDuration   = time.Duration(config.Timeout) * time.Second
 	httpClient          = &http.Client{Timeout: clients.RequestTimeout}
+	basicClient         = clients.NewBasicClient(false, "")
 	clientChannels      = sync.Map{}
 	serviceNameHeadless string
 	commsManager        ws.CommunicationManager
@@ -709,7 +710,7 @@ func handleCatchPokemonMsg(user string, catchPokemonMsg *location.CatchWildPokem
 	caught := rand.Float64() <= catchingProbability
 	var pokemonTokens []string
 	if caught {
-		trainersClient := clients.NewTrainersClient(httpClient, commsManager)
+		trainersClient := clients.NewTrainersClient(httpClient, commsManager, basicClient)
 		_, err = trainersClient.AddPokemonToTrainer(user, pokemon)
 		if err != nil {
 			channel <- location.CatchWildPokemonMessageResponse{
@@ -806,18 +807,19 @@ func answerToLocationMsg(channel chan<- *ws.WebsocketMsg, info ws.TrackedInfo, c
 }
 
 func getServersForCells(cells ...s2.CellID) (map[string]s2.CellUnion, error) {
-	configs, err := locationdb.GetAllServerConfigs() // TODO Can be optimized, instead of fetching all the configs and looping
+	// TODO Can be optimized, instead of fetching all the configs and looping
+	configs, err := locationdb.GetAllServerConfigs()
 	if err != nil {
 		return nil, err
 	}
 
 	servers := map[string]s2.CellUnion{}
+
 	for serverNameAux, configAux := range configs {
 		cellIds := convertCellTokensToIds(configAux.CellIdsStrings)
 		for _, cellID := range cells {
 			if cellIds.ContainsCellID(cellID) {
-				serverAddr := fmt.Sprintf("%s.%s", serverNameAux, serviceNameHeadless)
-				servers[serverAddr] = append(servers[serverAddr], cellID)
+				servers[serverNameAux] = append(servers[serverNameAux], cellID)
 			}
 		}
 	}
