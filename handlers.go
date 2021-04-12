@@ -153,6 +153,8 @@ func refreshBoundariesPeriodic() {
 		} else {
 			cells := convertCellTokensToIds(serverConfig.CellIdsStrings)
 			cm.setServerCells(cells)
+
+			log.Infof("My cells: %v", serverConfig.CellIdsStrings)
 		}
 	}
 }
@@ -212,6 +214,10 @@ func handleSetServerConfigs(w http.ResponseWriter, r *http.Request) {
 	cm.setServerCells(cellIds)
 }
 
+const (
+	allParam = "all"
+)
+
 // HandleGetActiveCells is a debug method to check if world is well subdivided
 func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 	type trainersInCell struct {
@@ -222,14 +228,18 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 	tmpMap := sync.Map{}
 	queryServerName := mux.Vars(r)[api.ServerNamePathVar]
+
 	log.Info("Request to get active cells")
-	if queryServerName == "all" {
+
+	if queryServerName == allParam {
 		log.Info("Getting active cells for all servers")
 		serverConfigs, fetchErr := locationdb.GetAllServerConfigs()
 		if fetchErr != nil {
 			panic(fetchErr)
 		}
+
 		wg := &sync.WaitGroup{}
+
 		for currServerName := range serverConfigs {
 			serverAddr := currServerName
 
@@ -244,19 +254,29 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 
 			wg.Add(1)
 			go func() {
-				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, serverAddr)}
+				u := url.URL{
+					Scheme: "http",
+					Host: fmt.Sprintf("%s.%s:%d", serverAddr,
+						serviceNameHeadless, port),
+					Path: fmt.Sprintf(api.GetActiveCells, serverAddr),
+				}
+
 				resp, err := http.Get(u.String())
 				if err != nil {
 					panic(err)
 				}
+
 				var respDecoded []trainersInCell
+
 				err = json.NewDecoder(resp.Body).Decode(&respDecoded)
 				if err != nil {
 					panic(err)
 				}
+
 				for _, curr := range respDecoded {
 					tmpMap.Store(curr.CellID, curr.TrainersNr)
 				}
+
 				wg.Done()
 				log.Infof("Done getting active cells from server %s", serverAddr)
 			}()
@@ -270,7 +290,12 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 			return true
 		})
 	} else {
-		u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActiveCells, queryServerName)}
+		u := url.URL{
+			Scheme: "http",
+			Host: fmt.Sprintf("%s.%s:%d", queryServerName,
+				serviceNameHeadless, port),
+			Path: fmt.Sprintf(api.GetActiveCells, queryServerName),
+		}
 		var resp *http.Response
 		resp, err := http.Get(u.String())
 		if err != nil {
@@ -284,6 +309,7 @@ func handleGetActiveCells(w http.ResponseWriter, r *http.Request) {
 		for _, curr := range respDecoded {
 			tmpMap.Store(curr.CellID, curr.TrainersNr)
 		}
+
 	}
 
 	var toSend []trainersInCell
@@ -323,7 +349,7 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 	tmpMap := sync.Map{}
 	queryServerName := mux.Vars(r)[api.ServerNamePathVar]
 	log.Info("Request to get active pokemons")
-	if queryServerName == "all" {
+	if queryServerName == allParam {
 		log.Info("Getting active pokemons for all servers")
 		serverConfigs, fetchErr := locationdb.GetAllServerConfigs()
 		if fetchErr != nil {
@@ -569,7 +595,8 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	}
 }
 
-func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.WebsocketMsg, finished chan struct{},
+func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.WebsocketMsg,
+	finished chan struct{},
 	writer ws.CommunicationManager) (done chan struct{}) {
 	done = make(chan struct{})
 
@@ -662,7 +689,8 @@ func handleLocationMsg(user string, wsMsg *ws.WebsocketMsg) error {
 	}
 }
 
-func handleCatchPokemonMsg(user string, catchPokemonMsg *location.CatchWildPokemonMessage, info ws.TrackedInfo,
+func handleCatchPokemonMsg(user string,
+	catchPokemonMsg *location.CatchWildPokemonMessage, info ws.TrackedInfo,
 	channel chan *ws.WebsocketMsg) error {
 	pokeball := catchPokemonMsg.Pokeball
 	if !pokeball.IsPokeBall() {
@@ -732,7 +760,8 @@ func handleCatchPokemonMsg(user string, catchPokemonMsg *location.CatchWildPokem
 	return nil
 }
 
-func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMessage, info ws.TrackedInfo,
+func handleUpdateLocationMsg(user string,
+	locationMsg *location.UpdateLocationMessage, info ws.TrackedInfo,
 	channel chan<- *ws.WebsocketMsg) error {
 	log.Infof("received location update from %s at location: %+v", user, locationMsg.Location)
 
@@ -750,7 +779,7 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 
 	if changed {
 		var serverNames []string
-		log.Infof("User %s got cellsPerServer: %+v", user, serverNames)
+		log.Infof("User %s got cellsPerServer: %+v", user, cellsPerServer)
 
 		for serverNameAux := range cellsPerServer {
 			serverNames = append(serverNames, serverNameAux)
@@ -761,13 +790,12 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 		}.ConvertToWSMessage(info)
 	}
 
-	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
 	channel <- location.CellsPerServerMessage{
 		CellsPerServer: cellsPerServer,
-		OriginServer:   myServer,
+		OriginServer:   serverName,
 	}.ConvertToWSMessage(info)
 
-	err = answerToLocationMsg(channel, info, cellsPerServer, myServer)
+	err = answerToLocationMsg(channel, info, cellsPerServer, serverName, user)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
 	}
@@ -775,21 +803,22 @@ func handleUpdateLocationMsg(user string, locationMsg *location.UpdateLocationMe
 	return nil
 }
 
-func handleUpdateLocationWithTilesMsg(user string, ulMsg *location.UpdateLocationWithTilesMessage, info ws.TrackedInfo,
+func handleUpdateLocationWithTilesMsg(user string,
+	ulMsg *location.UpdateLocationWithTilesMessage, info ws.TrackedInfo,
 	channel chan<- *ws.WebsocketMsg) error {
-	myServer := fmt.Sprintf("%s.%s", serverName, serviceNameHeadless)
 
 	log.Infof("received precomputed location update from %s with %v\n", user, ulMsg.CellsPerServer)
 
-	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, info, ulMsg.CellsPerServer, myServer))
+	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, info,
+		ulMsg.CellsPerServer, serverName, user))
 }
 
-func answerToLocationMsg(channel chan<- *ws.WebsocketMsg, info ws.TrackedInfo, cellsPerServer map[string]s2.CellUnion,
-	myServer string) error {
+func answerToLocationMsg(channel chan<- *ws.WebsocketMsg, info ws.TrackedInfo,
+	cellsPerServer map[string]s2.CellUnion, myServer, user string) error {
 	cells := cellsPerServer[myServer]
 
 	if len(cells) == 0 {
-		return errors.New("user contacted server that isnt responsible for any tile")
+		return fmt.Errorf("%s contacted server that isnt responsible for any tile", user)
 	}
 
 	gymsInVicinity := cm.getGymsInCells(cells)
