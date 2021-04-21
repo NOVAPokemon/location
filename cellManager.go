@@ -283,7 +283,7 @@ func (cm *cellManager) calculateLocationTileChanges(trainerId string, userLoc s2
 	// discard cells which are not in the new exit boundary
 	cellsToKeep := s2.CellUnionFromIntersection(newExitCellIds, oldCellIds)
 
-	// adds tiles to keep and new tiles to load in orded to return which cells user should load
+	// adds tiles to keep and new tiles to load in order to return which cells user should load
 	currentTiles = s2.CellUnionFromUnion(toAdd, cellsToKeep)
 	currentTiles.Denormalize(cm.trainersCellsLevel, 1)
 
