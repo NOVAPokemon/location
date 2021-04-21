@@ -17,6 +17,8 @@ import (
 
 	"github.com/golang/geo/s2"
 
+	originalHTTP "net/http"
+
 	"github.com/NOVAPokemon/utils"
 	"github.com/NOVAPokemon/utils/api"
 	"github.com/NOVAPokemon/utils/clients"
@@ -30,7 +32,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	originalHTTP "net/http"
 )
 
 type (
@@ -731,7 +732,6 @@ func handleMessagesLoop(conn *websocket.Conn, channel chan *ws.WebsocketMsg,
 
 			if err != nil {
 				panic(err)
-				return
 			} else {
 				select {
 				case channel <- wsMsg:
