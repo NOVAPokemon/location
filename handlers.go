@@ -555,6 +555,8 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	doneSend := handleWriteLoop(conn, outChan, finish, commsManager)
 
 	defer func() {
+		log.Infof("will finish connection to %s", user)
+
 		if err := cm.removeTrainerLocation(user); err != nil {
 			log.Warn(err)
 		}
