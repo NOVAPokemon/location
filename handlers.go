@@ -51,9 +51,14 @@ var (
 	serverName string
 
 	timeoutInDuration = time.Duration(config.Timeout) * time.Second
-	httpClient        = &http.Client{Client: originalHTTP.Client{Timeout: clients.RequestTimeout}}
-	clientChannels    = sync.Map{}
-	commsManager      ws.CommunicationManager
+	httpClient        = &http.Client{
+		Client: originalHTTP.Client{
+			Timeout:   clients.RequestTimeout,
+			Transport: clients.NewTransport(),
+		},
+	}
+	clientChannels = sync.Map{}
+	commsManager   ws.CommunicationManager
 
 	externalAddr string
 
