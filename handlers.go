@@ -44,7 +44,12 @@ var (
 	serverName          string
 	serverNr            int64
 	timeoutInDuration   = time.Duration(config.Timeout) * time.Second
-	httpClient          = &http.Client{Timeout: clients.RequestTimeout}
+	httpClient        = &http.Client{
+		Client: originalHTTP.Client{
+			Timeout:   clients.RequestTimeout,
+			Transport: clients.NewTransport(),
+		},
+	}
 	basicClient         = clients.NewBasicClient(false, "")
 	clientChannels      = sync.Map{}
 	serviceNameHeadless string
