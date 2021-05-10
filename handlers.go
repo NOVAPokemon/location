@@ -40,15 +40,12 @@ const (
 )
 
 var (
-	cm                  *cellManager
-	serverName          string
-	serverNr            int64
-	timeoutInDuration   = time.Duration(config.Timeout) * time.Second
-	httpClient        = &http.Client{
-		Client: originalHTTP.Client{
-			Timeout:   clients.RequestTimeout,
-			Transport: clients.NewTransport(),
-		},
+	cm         *cellManager
+	serverName string
+	serverNr   int64
+	httpClient = &http.Client{
+		Timeout:   utils.Timeout,
+		Transport: clients.NewTransport(),
 	}
 	basicClient         = clients.NewBasicClient(false, "")
 	clientChannels      = sync.Map{}
@@ -385,7 +382,10 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 
 			wg.Add(1)
 			go func() {
-				u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActivePokemons, serverAddr)}
+				u := url.URL{
+					Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", serverAddr, serviceNameHeadless, port),
+					Path: fmt.Sprintf(api.GetActivePokemons, serverAddr),
+				}
 				resp, err := http.Get(u.String())
 				if err != nil {
 					panic(err)
@@ -421,7 +421,10 @@ func handleGetActivePokemons(w http.ResponseWriter, r *http.Request) {
 			return true
 		})
 	} else {
-		u := url.URL{Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port), Path: fmt.Sprintf(api.GetActivePokemons, queryServerName)}
+		u := url.URL{
+			Scheme: "http", Host: fmt.Sprintf("%s.%s:%d", queryServerName, serviceNameHeadless, port),
+			Path: fmt.Sprintf(api.GetActivePokemons, queryServerName),
+		}
 		var resp *http.Response
 		resp, err := http.Get(u.String())
 		if err != nil {
@@ -545,10 +548,10 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 	clientChannels.Store(user, outChan)
 
-	_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
+	_ = conn.SetReadDeadline(time.Now().Add(utils.Timeout))
 	conn.SetPongHandler(func(string) error {
 		// log.Warn("Received pong")
-		_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
+		_ = conn.SetReadDeadline(time.Now().Add(utils.Timeout))
 		return nil
 	})
 	doneReceive := handleMessagesLoop(conn, inChan, finish)
@@ -589,7 +592,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 				log.Error(ws.WrapWritingMessageError(err))
 				return
 			}
-			_ = conn.SetReadDeadline(time.Now().Add(timeoutInDuration))
+			_ = conn.SetReadDeadline(time.Now().Add(utils.Timeout))
 		case <-pingTicker.C:
 			select {
 			case <-finish:
@@ -813,7 +816,6 @@ func handleUpdateLocationMsg(user string,
 func handleUpdateLocationWithTilesMsg(user string,
 	ulMsg *location.UpdateLocationWithTilesMessage, info ws.TrackedInfo,
 	channel chan<- *ws.WebsocketMsg) error {
-
 	log.Infof("received precomputed location update from %s with %v\n", user, ulMsg.CellsPerServer)
 
 	return wrapHandleLocationWithTilesMsgs(answerToLocationMsg(channel, info,
