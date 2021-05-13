@@ -6,7 +6,6 @@ import (
 
 	"github.com/NOVAPokemon/utils"
 	"github.com/golang/geo/s2"
-	log "github.com/sirupsen/logrus"
 )
 
 type pokemonsInCellValueType = *utils.WildPokemonWithServer
@@ -77,7 +76,6 @@ func (ac *activeCell) removeTrainer() int64 {
 
 func (ac *activeCell) addTrainer() int64 {
 	val := atomic.AddInt64(ac.nrTrainers, 1)
-	log.Infof("added trainer to cell %s (%d)", ac.cellID, val)
 	return val
 }
 
