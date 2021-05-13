@@ -548,11 +548,11 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 	clientChannels.Store(user, outChan)
 
-	_ = conn.SetWriteDeadline(time.Now().Add(ws.Timeout))
-	_ = conn.SetReadDeadline(time.Now().Add(ws.Timeout))
+	_ = conn.SetWriteDeadline(time.Now().Add(ws.WebsocketTimeout))
+	_ = conn.SetReadDeadline(time.Now().Add(ws.WebsocketTimeout))
 	conn.SetPongHandler(func(string) error {
 		// log.Warn("Received pong")
-		_ = conn.SetReadDeadline(time.Now().Add(ws.Timeout))
+		_ = conn.SetReadDeadline(time.Now().Add(ws.WebsocketTimeout))
 		return nil
 	})
 	doneReceive := handleMessagesLoop(conn, inChan, finish)
@@ -599,7 +599,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 				log.Error(ws.WrapWritingMessageError(err))
 				return
 			}
-			_ = conn.SetReadDeadline(time.Now().Add(ws.Timeout))
+			_ = conn.SetReadDeadline(time.Now().Add(ws.WebsocketTimeout))
 		case <-pingTicker.C:
 			select {
 			case <-finish:
@@ -628,7 +628,7 @@ func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.WebsocketMsg,
 					return
 				}
 
-				_ = conn.SetWriteDeadline(time.Now().Add(ws.Timeout))
+				_ = conn.SetWriteDeadline(time.Now().Add(ws.WebsocketTimeout))
 				err := writer.WriteGenericMessageToConn(conn, msg)
 				if err != nil {
 					log.Error(ws.WrapWritingMessageError(err))
