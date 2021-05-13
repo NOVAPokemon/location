@@ -44,7 +44,7 @@ var (
 	serverName string
 	serverNr   int64
 	httpClient = &http.Client{
-		Timeout:   utils.Timeout,
+		Timeout:   ws.Timeout,
 		Transport: clients.NewTransport(),
 	}
 	basicClient         = clients.NewBasicClient(false, "")
@@ -548,14 +548,15 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 
 	clientChannels.Store(user, outChan)
 
-	_ = conn.SetReadDeadline(time.Now().Add(utils.Timeout))
+	_ = conn.SetWriteDeadline(time.Now().Add(ws.Timeout))
+	_ = conn.SetReadDeadline(time.Now().Add(ws.Timeout))
 	conn.SetPongHandler(func(string) error {
 		// log.Warn("Received pong")
-		_ = conn.SetReadDeadline(time.Now().Add(utils.Timeout))
+		_ = conn.SetReadDeadline(time.Now().Add(ws.Timeout))
 		return nil
 	})
 	doneReceive := handleMessagesLoop(conn, inChan, finish)
-	doneSend := handleWriteLoop(conn, outChan, finish, commsManager)
+	doneSend := handleWriteLoop(conn, outChan, finish, commsManager, user)
 
 	defer func() {
 		log.Infof("will finish connection to %s", user)
@@ -566,7 +567,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 		close(finish)
 
 		if err := conn.Close(); err != nil {
-			log.Error(err)
+			log.Errorf("error closing conn %s", err.Error())
 		}
 
 		<-doneReceive
@@ -580,9 +581,15 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 	}()
 
 	atomic.AddInt64(cm.totalNrTrainers, 1)
-	pingTicker := time.NewTicker(time.Duration(config.Ping) * time.Second)
+	pingTicker := time.NewTicker(ws.TimeoutVal * (6. / 10.) * time.Second)
 	for {
 		select {
+		case <-doneReceive:
+			log.Infof("read routine finished early for %s", user)
+			return
+		case <-doneSend:
+			log.Infof("write routine finished early for %s", user)
+			return
 		case msg, ok := <-inChan:
 			if !ok {
 				continue
@@ -592,7 +599,7 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 				log.Error(ws.WrapWritingMessageError(err))
 				return
 			}
-			_ = conn.SetReadDeadline(time.Now().Add(utils.Timeout))
+			_ = conn.SetReadDeadline(time.Now().Add(ws.Timeout))
 		case <-pingTicker.C:
 			select {
 			case <-finish:
@@ -606,11 +613,14 @@ func handleUserLocationUpdates(user string, conn *websocket.Conn) {
 }
 
 func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.WebsocketMsg,
-	finished chan struct{},
-	writer ws.CommunicationManager) (done chan struct{}) {
+	finished chan struct{}, writer ws.CommunicationManager, username string) (done chan struct{}) {
 	done = make(chan struct{})
 
 	go func() {
+		defer func() {
+			close(done)
+			log.Infof("closed writing loop for %s", username)
+		}()
 		for {
 			select {
 			case msg, ok := <-channel:
@@ -618,6 +628,7 @@ func handleWriteLoop(conn *websocket.Conn, channel <-chan *ws.WebsocketMsg,
 					return
 				}
 
+				_ = conn.SetWriteDeadline(time.Now().Add(ws.Timeout))
 				err := writer.WriteGenericMessageToConn(conn, msg)
 				if err != nil {
 					log.Error(ws.WrapWritingMessageError(err))
