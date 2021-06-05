@@ -241,13 +241,11 @@ func (cm *cellManager) updateTrainerTiles(trainerId string, loc s2.LatLng) (s2.C
 
 	changed := len(cellsToRemove) > 0 || len(cellsToAdd) > 0
 	for _, cellID := range cellsToRemove {
-		log.Infof("User %s left cell %d", trainerId, cellID)
 		cm.removeTrainerFromCell(cellID)
 	}
 
 	for _, cellID := range cellsToAdd {
 		cm.addTrainerToCell(cellID)
-		log.Infof("User %s entered cell %s", trainerId, cellID.ToToken())
 	}
 
 	cm.lastTrainerCells.Store(trainerId, currentCells)
