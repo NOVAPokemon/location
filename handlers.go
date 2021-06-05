@@ -791,8 +791,6 @@ func handleUpdateLocationMsg(user string,
 		return wrapHandleLocationMsgs(err)
 	}
 
-	log.Infof("User %s is on %d cells: %+v", user, len(currCells), currCells)
-
 	cellsPerServer, err := getServersForCells(currCells...)
 	if err != nil {
 		return wrapHandleLocationMsgs(err)
@@ -800,7 +798,6 @@ func handleUpdateLocationMsg(user string,
 
 	if changed {
 		var serverNames []string
-		log.Infof("User %s got cellsPerServer: %+v", user, cellsPerServer)
 
 		for serverNameAux := range cellsPerServer {
 			serverNames = append(serverNames, serverNameAux)
